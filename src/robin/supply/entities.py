@@ -410,7 +410,7 @@ class Service:
         rolling_stock (RollingStock): Rolling Stock used in the service.
         capacity_constraints (Mapping[Tuple[str, str], Mapping[int, int]]): Constrained capacity (limit seats available
             between a specific pair of stations).
-        lift_constraints (int): Minimum anticipation (days) to lift capacity constraints.
+        lift_constraints (datetime.date): Date when capacity constraints are lifted.
         prices (Mapping[Tuple[str, str], Mapping[Seat, float]]): Prices for each pair of stations and each Seat type.
         seat_types (Mapping[str, Seat]): Seat types available in the service.
         tickets_sold_seats (Mapping[Seat, int]): Number of seats sold for each Seat type.
@@ -458,7 +458,7 @@ class Service:
         self.service_arrival_time = self.schedule[-1][0].seconds / 3600  # Service arrival time in hours
         self.rolling_stock = rolling_stock
         self.capacity_constraints = capacity_constraints
-        self.lift_constraints = lift_constraints
+        self.lift_constraints = self.date - datetime.timedelta(days=lift_constraints)
         self.prices = prices
         self._seat_types = set([seat for seat_price in self.prices.values() for seat in seat_price.keys()])
         self.seat_types = {seat.name: seat for seat in self._seat_types}
@@ -586,7 +586,7 @@ class Service:
         return True
 
     @cache
-    def tickets_available(self, origin: str, destination: str, seat: Seat, anticipation: int) -> bool:
+    def tickets_available(self, origin: str, destination: str, seat: Seat, purchase_day: datetime.datetime) -> bool:
         """
         Check if there are tickets available for the service.
 
@@ -594,7 +594,7 @@ class Service:
             origin (str): Origin station ID.
             destination (str): Destination station ID.
             seat (Seat): Seat type.
-            anticipation (int): Days of anticipation in the purchase of the ticket.
+            purchase_day (datetime.datetime): Day of purchase of the ticket.
 
         Returns:
             bool: True if there are tickets available, False otherwise.
@@ -603,7 +603,7 @@ class Service:
         pair_capacity = self._pair_capacity[(origin, destination)][seat.hard_type]
         tickets_available = self._tickets_available(origin=origin, destination=destination, seat=seat)
         # Check if there are tickets available considering capacity constraints
-        if self.capacity_constraints and anticipation > self.lift_constraints and (origin, destination) in self.capacity_constraints:
+        if self.capacity_constraints and purchase_day < self.lift_constraints and (origin, destination) in self.capacity_constraints:
             constrained_capacity = self.capacity_constraints[(origin, destination)][seat.hard_type]
             if pair_capacity < constrained_capacity and tickets_available:
                 return True
