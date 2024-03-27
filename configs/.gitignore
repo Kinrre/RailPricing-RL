@@ -33,3 +33,7 @@
 !calibration/demand_data_target.yml
 !calibration/demand_data.yml
 !calibration/supply_data.yml
+
+!rl
+!rl/demand_data.yml
+!rl/supply_data.yml
