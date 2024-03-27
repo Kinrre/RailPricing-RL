@@ -222,6 +222,19 @@ timeSlot:
   end: '15:10:00'
 
 service:
+- id: 5_06-09-2022-06.15
+  date: '2022-09-06'
+  line: '5'
+  train_service_provider: '1'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 50.0
+  capacity_constraints: null
 - id: 5_06-09-2023-06.15
   date: '2023-09-06'
   line: '5'
