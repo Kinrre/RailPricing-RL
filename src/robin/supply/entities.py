@@ -739,6 +739,19 @@ class Supply:
             List[Service]: List of Service objects that meet the user requests.
         """
         return [service for service in self.services if service.tsp.id == tsp_id]
+    
+    def filter_active_services_by_tsp(self, tsp_id: str, date: datetime.date) -> List[Service]:
+        """
+        Filters a List of Services by Train Service Provider ID, date.
+
+        Args:
+            tsp_id (str): Train Service Provider ID.
+            date (datetime.date): Date of service (day, month, year, without time).
+
+        Returns:
+            List[Service]: List of Service objects that meet the user requests.
+        """
+        return [service for service in self.services if service.tsp.id == tsp_id and date <= service.date]
 
     @classmethod
     def _get_stations(cls, data: Mapping[Any, Any], key: str = 'stations') -> Dict[str, Station]:
