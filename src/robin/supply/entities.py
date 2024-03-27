@@ -6,7 +6,7 @@ import yaml
 from .utils import get_time, get_date, format_td, set_stations_ids, convert_tree_to_dict
 
 from copy import deepcopy
-from functools import cache
+from functools import lru_cache
 from pathlib import Path
 from typing import Any, Dict, List, Mapping, Set, Tuple, Union
 
@@ -500,7 +500,7 @@ class Service:
             absolute_schedule.append((abs_dt, abs_at))
         return absolute_schedule
 
-    @cache
+    @lru_cache(maxsize=None)
     def _get_affected_pairs(self, origin: str, destination: str) -> Set[Tuple[str, str]]:
         """
         Private method to get the pairs affected by origin-destination selection.
@@ -585,7 +585,7 @@ class Service:
         self.tickets_sold_hard_types[seat.hard_type] += 1
         return True
 
-    @cache
+    @lru_cache(maxsize=None)
     def tickets_available(self, origin: str, destination: str, seat: Seat, purchase_day: datetime.datetime) -> bool:
         """
         Check if there are tickets available for the service.
@@ -652,13 +652,13 @@ class Supply:
             services (List[Service]): List of services available in the system.
         """
         self.services = services
-        self.stations = list(set(station for service in services for station in service.line.stations))
-        self.time_slots = list(set(service.time_slot for service in services))
-        self.corridors = list(set(service.line.corridor for service in services))
-        self.lines = list(set(service.line for service in services))
-        self.seats = list(set(seat for service in services for t in service.prices.values() for seat in t.keys()))
-        self.rolling_stocks = list(set(service.rolling_stock for service in services))
-        self.tsps = list(set(service.tsp for service in services))
+        self.stations = list(dict.fromkeys(station for service in services for station in service.line.stations))
+        self.time_slots = list(dict.fromkeys(service.time_slot for service in services))
+        self.corridors = list(dict.fromkeys(service.line.corridor for service in services))
+        self.lines = list(dict.fromkeys(service.line for service in services))
+        self.seats = list(dict.fromkeys(seat for service in services for t in service.prices.values() for seat in t.keys()))
+        self.rolling_stocks = list(dict.fromkeys(service.rolling_stock for service in services))
+        self.tsps = list(dict.fromkeys(service.tsp for service in services))
 
     @classmethod
     def from_yaml(cls, path: Path) -> 'Supply':
@@ -709,7 +709,7 @@ class Supply:
             if service.id == service_id:
                 return service
 
-    @cache
+    @lru_cache(maxsize=None)
     def filter_services(self, origin: str, destination: str, date: datetime.date) -> List[Service]:
         """
         Filters a List of Services available in the system that meet the users requirements.
@@ -727,6 +727,18 @@ class Supply:
             if service.date == date and (origin, destination) in service.prices.keys():
                 filtered_services.append(service)
         return filtered_services
+
+    def filter_services_by_tsp(self, tsp_id: str) -> List[Service]:
+        """
+        Filters a List of Services by Train Service Provider ID.
+
+        Args:
+            tsp_id (str): Train Service Provider ID.
+
+        Returns:
+            List[Service]: List of Service objects that meet the user requests.
+        """
+        return [service for service in self.services if service.tsp.id == tsp_id]
 
     @classmethod
     def _get_stations(cls, data: Mapping[Any, Any], key: str = 'stations') -> Dict[str, Station]:
