@@ -24,7 +24,7 @@ class Kernel:
         passengers (List[Passenger]): List of passengers.
         passengers_purchase_day (Dict[datetime.date, List[Passenger]]): Dictionary with passengers grouped by purchase day.
         simulation_days (List[datetime.date]): List of simulation days.
-        last_simulated_day_idx (Union[int, None]): Index of the last simulated day.
+        simulation_day_idx (int): Index of the current simulation day.
     """
     
     def __init__(self, path_config_supply: Path, path_config_demand: Path, seed: Union[int, None] = None) -> None:
@@ -43,7 +43,7 @@ class Kernel:
         self.passengers = self.demand.generate_passengers()
         self.passengers_purchase_day = self._group_passengers_by_purchase_day(self.passengers)
         self.simulation_days = self._get_simulation_days()
-        self.last_simulated_day_idx = None
+        self._simulation_day_idx = 0
 
     def _get_simulation_days(self) -> List[datetime.date]:
         """
@@ -214,6 +214,16 @@ class Kernel:
         df = pd.DataFrame(data=data, columns=column_names)
         df.to_csv(output_path, index=False)
 
+    @property
+    def simulation_day(self) -> datetime.date:
+        """
+        Get the current simulation day.
+
+        Returns:
+            datetime.date: Current simulation day.
+        """
+        return self.simulation_days[self._simulation_day_idx]
+
     def simulate(
             self,
             output_path: Union[Path, None] = None,
@@ -267,22 +277,19 @@ class Kernel:
         Returns:
             List[Service]: List of services with updated tickets.
         """
-        # Update last simulated day index
-        if self.last_simulated_day_idx is None:
-            self.last_simulated_day_idx = 0
-        else:
-            self.last_simulated_day_idx += 1
-            if self.last_simulated_day_idx >= len(self.simulation_days):
-                logging.warn('All days have been simulated, simulation will not continue.')
-                return self.supply.services
-        
+        # Check if all days have been simulated
+        if self._simulation_day_idx > len(self.simulation_days):
+            logging.warn('All days have been simulated, simulation will not continue.')
+            return self.supply.services
         # Simulate demand-supply interaction for the next available purchase day
         self._simulate(
-            passengers=self.passengers_purchase_day[self.simulation_days[self.last_simulated_day_idx]],
+            passengers=self.passengers_purchase_day[self.simulation_day],
             output_path=output_path,
             departure_time_hard_restriction=departure_time_hard_restriction,
             calculate_global_utility=calculate_global_utility
         )
+        # Update simulation day index
+        self._simulation_day_idx += 1
         return self.supply.services
 
     def set_seed(self, seed: int) -> None:
