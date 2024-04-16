@@ -33,6 +33,10 @@ seat:
   name: Basic
   hard_type: 1
   soft_type: 1
+- id: '2'
+  name: Premium
+  hard_type: 2
+  soft_type: 1
 
 corridor:
 - id: '1'
@@ -133,6 +137,8 @@ rollingStock:
   seats:
   - hard_type: 1
     quantity: 250
+  - hard_type: 2
+    quantity: 50
 
 trainServiceProvider:
 - id: '1'
@@ -234,6 +240,8 @@ service:
     seats:
     - seat: '1'
       price: 50.0
+    - seat: '2'
+      price: 75.0
   capacity_constraints: null
 - id: 5_06-09-2023-06.15
   date: '2023-09-06'
@@ -247,6 +255,8 @@ service:
     seats:
     - seat: '1'
       price: 70.0
+    - seat: '2'
+      price: 115.0
   capacity_constraints: null
 - id: 6_06-09-2023-06.15
   date: '2023-09-06'
@@ -260,6 +270,8 @@ service:
     seats:
     - seat: '1'
       price: 100.0
+    - seat: '2'
+      price: 150.0
   capacity_constraints: null
 - id: 5_06-09-2023-18.30
   date: '2023-09-06'
@@ -273,6 +285,8 @@ service:
     seats:
     - seat: '1'
       price: 70.0
+    - seat: '2'
+      price: 115.0
   capacity_constraints: null
 - id: 6_06-09-2023-18.30
   date: '2023-09-06'
@@ -286,4 +300,6 @@ service:
     seats:
     - seat: '1'
       price: 100.0
+    - seat: '2'
+      price: 150.0
   capacity_constraints: null
