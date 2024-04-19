@@ -742,7 +742,9 @@ class Supply:
     
     def filter_active_services_by_tsp(self, tsp_id: str, date: datetime.date) -> List[Service]:
         """
-        Filters a List of Services by Train Service Provider ID, date.
+        Filters a List of Services by Train Service Provider ID and date.
+
+        An active service is a service that the train has not departed yet.
 
         Args:
             tsp_id (str): Train Service Provider ID.
