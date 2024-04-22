@@ -1,5 +1,5 @@
 from src.robin.kernel.entities import Kernel
-from .constants import *
+from .constants import LOW_PRICE, HIGH_PRICE, LOW_ACTION, HIGH_ACTION
 
 from functools import cached_property, lru_cache
 from gymnasium import ActionWrapper, Env
@@ -124,8 +124,8 @@ class RobinEnv(Env):
         """
         observation_space = spaces.Tuple([
             spaces.Dict({
-                # service already departed?
-                # date time details?
+                # service already departed for an action mask?
+                # date time details? day of the week?
                 'line': spaces.Discrete(self.n_lines),
                 'corridor': spaces.Discrete(self.n_corridors),
                 'time_slot': spaces.Discrete(self.n_time_slots),
@@ -138,7 +138,7 @@ class RobinEnv(Env):
                         'seats': spaces.Tuple([
                             spaces.Dict({
                                 'seat_type': spaces.Discrete(self.n_seats),
-                                'price': spaces.Box(low=0, high=np.inf, shape=())
+                                'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=())
                             }) for _ in seats
                         ])
                     }) for _, seats in service.prices.items()
@@ -174,7 +174,7 @@ class RobinEnv(Env):
                 'seats': spaces.Tuple([
                     spaces.Dict({
                         'seat_type': spaces.Discrete(self.n_seats),
-                        'price': spaces.Box(low=0, high=1, shape=()) # normalization of price modifications
+                        'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=()) # normalization of price modifications
                     }) for _ in service.prices
                 ])
             }) for service in self.kernel.supply.services
