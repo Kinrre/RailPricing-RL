@@ -1,11 +1,11 @@
 from src.robin.kernel.entities import Kernel
 from .constants import *
 
+from functools import cached_property, lru_cache
 from gymnasium import ActionWrapper, Env
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
-
 from pathlib import Path
 from typing import Union
 
@@ -24,37 +24,82 @@ class FlattenAction(ActionWrapper):
 
 
 class RobinEnv(Env):
+    """
+    Reinforcement learning environment for the Robin simulator.
+
+    Attributes:
+        path_config_supply (Path): Path to the supply configuration file.
+        path_config_demand (Path): Path to the demand configuration file.
+        kernel (Kernel): Kernel of the simulator.
+    """
 
     def __init__(self, path_config_supply: Path, path_config_demand: Path, seed: Union[int, None] = None) -> None:
+        """
+        Initialize the environment.
+
+        Args:
+            path_config_supply (Path): Path to the supply configuration file.
+            path_config_demand (Path): Path to the demand configuration file.
+            seed (int, None): Seed for the random number generator.
+        """
         self.path_config_supply = path_config_supply
         self.path_config_demand = path_config_demand
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
 
+    @lru_cache(maxsize=None)
+    def _get_element_idx_from_id(self, elements: tuple, id: str) -> int:
+        """
+        Get the index of an element from its id given a tuple.
+
+        Args:
+            elements (tuple): Tuple of elements.
+            id (str): Id of the element.
+        
+        Returns:
+            int: Index of the element.
+        """
+        return elements.index(next(filter(lambda x: x.id == id, elements)))
+
     def _get_obs(self) -> list:
-        # next step, get the obs from the supply
+        """
+        Get the observation of the environment.
+
+        Returns:
+            list: Observation of the environment.
+        """
         obs = []
         for service in self.kernel.supply.services:
             obs.append({
-                'line': service.line.id,
-                'corridor': service.line.id,
-                'time_slot': service.time_slot.id,
-                'rolling_stock': service.rolling_stock.id,
+                'line': self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id),
+                'corridor': self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id),
+                'time_slot': self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id),
+                'rolling_stock': self._get_element_idx_from_id(self.kernel.supply.rolling_stocks, service.rolling_stock.id),
                 'prices': [{
-                    'origin': price.origin.id,
-                    'destination': price.destination.id,
+                    'origin': self._get_element_idx_from_id(self.kernel.supply.stations, origin),
+                    'destination': self._get_element_idx_from_id(self.kernel.supply.stations, destination),
                     'seats': [{
-                        'seat_type': seat.id,
-                        'price': price.get_price(seat)
-                    } for seat in self.kernel.supply.seats]
-                } for price in service.prices],
+                        'seat_type': self._get_element_idx_from_id(self.kernel.supply.seats, seat.id),
+                        'price': price
+                    } for seat, price in seats.items()]
+                } for (origin, destination), seats in service.prices.items()],
                 'tickets_sold': [{
-                    'origin': ticket.origin.id,
-                    'destination': ticket.destination.id,
-                    'count': ticket.count
-                } for ticket in service.tickets_sold]
+                    'origin': self._get_element_idx_from_id(self.kernel.supply.stations, origin),
+                    'destination': self._get_element_idx_from_id(self.kernel.supply.stations, destination),
+                    'seats': [{
+                        'seat_type': self._get_element_idx_from_id(self.kernel.supply.seats, seat.id),
+                        'count': count
+                    } for seat, count in seats.items()]
+                } for (origin, destination), seats in service.tickets_sold_pair_seats.items()]
             })
+        return obs
 
     def _get_info(self) -> dict:
+        """
+        Get the info of the environment.
+
+        Returns:
+            dict: Info of the environment. Default is an empty dictionary.
+        """
         return {}
 
     def step(self, action: list):
@@ -62,14 +107,21 @@ class RobinEnv(Env):
         # calculate the reward
         pass
 
-    def reset(self, seed: Union[int, None] = None) -> None:
+    def reset(self, seed: Union[int, None] = None, options = None) -> None:
         super().reset(seed=seed)
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
-        self._get_obs()
+        obs = self._get_obs()
+        info = self._get_info()
+        return obs, info
 
-    # cache
-    @property
+    @cached_property
     def observation_space(self) -> spaces.Space:
+        """
+        Observation space of the environment.
+
+        Returns:
+            spaces.Space: Observation space of the environment.
+        """
         observation_space = spaces.Tuple([
             spaces.Dict({
                 # service already departed?
@@ -81,90 +133,85 @@ class RobinEnv(Env):
                 # capacity of the rolling stock?
                 'prices': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(self.n_stops),
-                        'destination': spaces.Discrete(self.n_stops),
+                        'origin': spaces.Discrete(self.n_stations),
+                        'destination': spaces.Discrete(self.n_stations),
                         'seats': spaces.Tuple([
                             spaces.Dict({
                                 'seat_type': spaces.Discrete(self.n_seats),
                                 'price': spaces.Box(low=0, high=np.inf, shape=())
-                            }) for _ in range(self.n_seats)
+                            }) for _ in seats
                         ])
-                    }) for _ in range(self.n_stops - 1) # there aren't prices for the same origin and destination
+                    }) for _, seats in service.prices.items()
                 ]),
                 'tickets_sold': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(self.n_stops),
-                        'destination': spaces.Discrete(self.n_stops),
-                        'count': spaces.Discrete(self.max_capacity) # split into seat types?
-                    }) for _ in range(self.n_stops - 1) # there aren't prices for the same origin and destination
+                        'origin': spaces.Discrete(self.n_stations),
+                        'destination': spaces.Discrete(self.n_stations),
+                        'seats': spaces.Tuple([
+                            spaces.Dict({
+                                'seat_type': spaces.Discrete(self.n_seats),
+                                'count': spaces.Discrete(service.rolling_stock.total_capacity)
+                            }) for _ in seats
+                        ])
+                    }) for _, seats in service.prices.items()
                 ]),
-            }) for _ in range(self.n_services)
+            }) for service in self.kernel.supply.services
         ])
         return observation_space
 
-    @property
+    @cached_property
     def action_space(self) -> spaces.Space:
+        """
+        Action space of the environment.
+
+        Returns:
+            spaces.Space: Action space of the environment.
+        """
         action_space = spaces.Tuple([
             spaces.Dict({
-                'origin': spaces.Discrete(self.n_stops),
-                'destination': spaces.Discrete(self.n_stops),
+                'origin': spaces.Discrete(self.n_stations),
+                'destination': spaces.Discrete(self.n_stations),
                 'seats': spaces.Tuple([
                     spaces.Dict({
                         'seat_type': spaces.Discrete(self.n_seats),
                         'price': spaces.Box(low=0, high=1, shape=()) # normalization of price modifications
-                    }) for _ in range(self.n_seats)
+                    }) for _ in service.prices
                 ])
-            }) for _ in range(self.n_services)
+            }) for service in self.kernel.supply.services
         ])
         return action_space
-
-    @property
-    def n_services(self):
-        """Number of services."""
-        return len(self.kernel.supply.services)
     
-    @property
+    @cached_property
     def n_lines(self):
         """Number of lines."""
         return len(self.kernel.supply.lines)
     
-    @property
+    @cached_property
     def n_corridors(self):
         """Number of corridors."""
         return len(self.kernel.supply.corridors)
     
-    @property
+    @cached_property
     def n_time_slots(self):
         """Number of time slots."""
         return len(self.kernel.supply.time_slots)
     
-    @property
+    @cached_property
     def n_rolling_stocks(self):
         """Number of rolling stocks."""
         return len(self.kernel.supply.rolling_stocks)
 
-    @property
+    @cached_property
+    def n_stations(self):
+        """Number of stations."""
+        return len(self.kernel.supply.stations)
+
+    @cached_property
     def n_seats(self):
         """Number of seat types."""
         return len(self.kernel.supply.seats)
-    
-    @property
-    def n_stops(self):
-        """Maximum number of stops in a line."""
-        line = max(self.kernel.supply.lines, key=lambda x: len(x.stations))
-        return len(line.stations)
 
-    @property
+    @cached_property
     def max_capacity(self):
         """Maximum capacity of a rolling stock."""
         return max(self.kernel.supply.rolling_stocks, key=lambda x: x.total_capacity).total_capacity
-
-
-if __name__ == '__main__':
-    env = RobinEnv(path_config_demand='configs/demand_data.yml', path_config_supply='configs/supply_data.yml', seed=0)
-    env = FlattenObservation(env)
-    env = FlattenAction(env)
-    print(env.observation_space.sample())
-    print(env.observation_space)
-    print(env.action_space.sample())
-    print(env.action_space)
