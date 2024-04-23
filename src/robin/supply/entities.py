@@ -419,6 +419,8 @@ class Service:
             and each Seat types.
         tickets_sold_pair_hard_types (Mapping[Tuple[str, str], Mapping[int, int]]): Number of seats sold for each pair of
             stations and each hard types.
+        total_profit (float): Total profit of the service.
+        profit_pair_seats (Mapping[Tuple[str, str], Dict[Seat, int]]): Profit for each pair of stations and each Seat type.
     """
 
     def __init__(
@@ -466,6 +468,8 @@ class Service:
         self.tickets_sold_hard_types = {hard_type: 0 for hard_type in self.rolling_stock.seats.keys()}
         self.tickets_sold_pair_seats = {pair: {seat: 0 for seat in self._seat_types} for pair in self.line.pairs}
         self.tickets_sold_pair_hard_types = self._get_tickets_sold_pair_hard_type()
+        self.total_profit = 0
+        self.profit_pair_seats = {pair: {seat: 0 for seat in self._seat_types} for pair in self.line.pairs}
         self._pair_capacity = {pair: {hard_type: 0 for hard_type in self.rolling_stock.seats.keys()} for pair in
                                self.line.pairs}
 
@@ -583,6 +587,8 @@ class Service:
         self.tickets_sold_pair_seats[(origin, destination)][seat] += 1
         self.tickets_sold_seats[seat] += 1
         self.tickets_sold_hard_types[seat.hard_type] += 1
+        self.total_profit += self.prices[(origin, destination)][seat]
+        self.profit_pair_seats[(origin, destination)][seat] += self.prices[(origin, destination)][seat]
         return True
 
     @lru_cache(maxsize=None)

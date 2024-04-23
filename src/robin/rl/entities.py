@@ -103,23 +103,49 @@ class RobinEnv(Env):
         """
         Get the info of the environment.
 
+        No info is provided for the moment.
+
         Returns:
-            dict: Info of the environment. Default is an empty dictionary.
+            dict: Info of the environment.
         """
         return {}
 
+    def _get_reward(self) -> float:
+        """
+        Get the reward of the environment.
+
+        The total profit of the services.
+
+        Returns:
+            float: Reward of the environment.
+        """
+        # think about how we can feed the reward in different components to the agent
+        # as we have multiple services, markets and seats, this information can be useful
+        reward = sum(service.total_profit for service in self.kernel.supply.services)
+        return reward
+
     def step(self, action: list) -> Tuple[list, float, bool, bool, dict]:
         # simulate a day
-        # calculate the reward
         pprint(action, sort_dicts=False)
+        print(self._get_reward())
         obs = self._get_obs()
-        reward = 0
+        reward = self._get_reward()
         terminated = False
         truncated = False
         info = self._get_info()
         return obs, reward, terminated, truncated, info
 
-    def reset(self, seed: Union[int, None] = None, options = None) -> None:
+    def reset(self, seed: Union[int, None] = None, options: dict = None) -> Tuple[list, dict]:
+        """
+        Reset the environment.
+
+        Args:
+            seed (int, None): Seed for the random number generator.
+            options (dict, None): Options for the reset.
+        
+        Returns:
+            Tuple[list, dict]: Observation and info of the environment.
+        """
         super().reset(seed=seed)
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         obs = self._get_obs()
@@ -138,11 +164,11 @@ class RobinEnv(Env):
             spaces.Dict({
                 # service already departed for an action mask?
                 # date time details? day of the week?
+                # capacity of the rolling stock?
                 'line':spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id)),
                 'corridor': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id)),
                 'time_slot': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id)),
                 'rolling_stock': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.rolling_stocks, service.rolling_stock.id)),
-                # capacity of the rolling stock?
                 'prices': spaces.Tuple([
                     spaces.Dict({
                         'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
