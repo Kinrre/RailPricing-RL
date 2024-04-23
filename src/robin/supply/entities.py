@@ -460,7 +460,7 @@ class Service:
         self.capacity_constraints = capacity_constraints
         self.lift_constraints = self.date - datetime.timedelta(days=lift_constraints)
         self.prices = prices
-        self._seat_types = set([seat for seat_price in self.prices.values() for seat in seat_price.keys()])
+        self._seat_types = tuple(dict.fromkeys([seat for seat_price in self.prices.values() for seat in seat_price.keys()]))
         self.seat_types = {seat.name: seat for seat in self._seat_types}
         self.tickets_sold_seats = {seat: 0 for seat in self._seat_types}
         self.tickets_sold_hard_types = {hard_type: 0 for hard_type in self.rolling_stock.seats.keys()}

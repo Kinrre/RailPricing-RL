@@ -8,10 +8,12 @@ from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
 from pathlib import Path
 from typing import Union
+from pprint import pprint
 
 
 class FlattenAction(ActionWrapper):
     """Action wrapper that flattens the action space."""
+
     def __init__(self, env):
         super().__init__(env)
         self.action_space = flatten_space(self.env.action_space)
@@ -105,7 +107,7 @@ class RobinEnv(Env):
     def step(self, action: list):
         # simulate a day
         # calculate the reward
-        pass
+        pprint(action, sort_dicts=False)
 
     def reset(self, seed: Union[int, None] = None, options = None) -> None:
         super().reset(seed=seed)
@@ -126,34 +128,34 @@ class RobinEnv(Env):
             spaces.Dict({
                 # service already departed for an action mask?
                 # date time details? day of the week?
-                'line': spaces.Discrete(self.n_lines),
-                'corridor': spaces.Discrete(self.n_corridors),
-                'time_slot': spaces.Discrete(self.n_time_slots),
-                'rolling_stock': spaces.Discrete(self.n_rolling_stocks),
+                'line':spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id)),
+                'corridor': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id)),
+                'time_slot': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id)),
+                'rolling_stock': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.rolling_stocks, service.rolling_stock.id)),
                 # capacity of the rolling stock?
                 'prices': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(self.n_stations),
-                        'destination': spaces.Discrete(self.n_stations),
+                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
+                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Discrete(self.n_seats),
+                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
                                 'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=())
-                            }) for _ in seats
+                            }) for seat, _ in seats.items()
                         ])
-                    }) for _, seats in service.prices.items()
+                    }) for (origin, destination), seats in service.prices.items()
                 ]),
                 'tickets_sold': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(self.n_stations),
-                        'destination': spaces.Discrete(self.n_stations),
+                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
+                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Discrete(self.n_seats),
+                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
                                 'count': spaces.Discrete(service.rolling_stock.total_capacity)
-                            }) for _ in seats
+                            }) for seat, _ in seats.items()
                         ])
-                    }) for _, seats in service.prices.items()
+                    }) for (origin, destination), seats in service.prices.items()
                 ]),
             }) for service in self.kernel.supply.services
         ])
@@ -169,49 +171,18 @@ class RobinEnv(Env):
         """
         action_space = spaces.Tuple([
             spaces.Dict({
-                'origin': spaces.Discrete(self.n_stations),
-                'destination': spaces.Discrete(self.n_stations),
-                'seats': spaces.Tuple([
+                'prices': spaces.Tuple([
                     spaces.Dict({
-                        'seat_type': spaces.Discrete(self.n_seats),
-                        'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=()) # normalization of price modifications
-                    }) for _ in service.prices
+                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
+                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
+                        'seats': spaces.Tuple([
+                            spaces.Dict({
+                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
+                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=()) # normalization of price modifications
+                            }) for seat, _ in seats.items()
+                        ])
+                    }) for (origin, destination), seats in service.prices.items()
                 ])
             }) for service in self.kernel.supply.services
         ])
         return action_space
-    
-    @cached_property
-    def n_lines(self):
-        """Number of lines."""
-        return len(self.kernel.supply.lines)
-    
-    @cached_property
-    def n_corridors(self):
-        """Number of corridors."""
-        return len(self.kernel.supply.corridors)
-    
-    @cached_property
-    def n_time_slots(self):
-        """Number of time slots."""
-        return len(self.kernel.supply.time_slots)
-    
-    @cached_property
-    def n_rolling_stocks(self):
-        """Number of rolling stocks."""
-        return len(self.kernel.supply.rolling_stocks)
-
-    @cached_property
-    def n_stations(self):
-        """Number of stations."""
-        return len(self.kernel.supply.stations)
-
-    @cached_property
-    def n_seats(self):
-        """Number of seat types."""
-        return len(self.kernel.supply.seats)
-
-    @cached_property
-    def max_capacity(self):
-        """Maximum capacity of a rolling stock."""
-        return max(self.kernel.supply.rolling_stocks, key=lambda x: x.total_capacity).total_capacity
