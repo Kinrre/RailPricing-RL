@@ -1,5 +1,5 @@
 from src.robin.kernel.entities import Kernel
-from .constants import LOW_PRICE, HIGH_PRICE, LOW_ACTION, HIGH_ACTION
+from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
 
 from functools import cached_property, lru_cache
 from gymnasium import ActionWrapper, Env
@@ -8,7 +8,6 @@ from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
 from pathlib import Path
 from typing import Tuple, Union
-from pprint import pprint
 
 
 class FlattenAction(ActionWrapper):
@@ -37,9 +36,16 @@ class RobinEnv(Env):
         path_config_supply (Path): Path to the supply configuration file.
         path_config_demand (Path): Path to the demand configuration file.
         kernel (Kernel): Kernel of the simulator.
+        action_factor (int): Factor to multiply the price action.
     """
 
-    def __init__(self, path_config_supply: Path, path_config_demand: Path, seed: Union[int, None] = None) -> None:
+    def __init__(
+            self,
+            path_config_supply: Path,
+            path_config_demand: Path,
+            action_factor: int = ACTION_FACTOR,
+            seed: Union[int, None] = None
+    ) -> None:
         """
         Initialize the environment.
 
@@ -47,10 +53,13 @@ class RobinEnv(Env):
             path_config_supply (Path): Path to the supply configuration file.
             path_config_demand (Path): Path to the demand configuration file.
             seed (int, None): Seed for the random number generator.
+            action_factor (int): Factor to multiply the price action.
         """
         self.path_config_supply = path_config_supply
         self.path_config_demand = path_config_demand
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
+        self.action_factor = action_factor
+        self._last_total_profit = 0
 
     @lru_cache(maxsize=None)
     def _get_element_idx_from_id(self, elements: tuple, id: str) -> int:
@@ -110,27 +119,74 @@ class RobinEnv(Env):
         """
         return {}
 
+    def _get_terminated(self) -> bool:
+        """
+        Get the termination of the environment.
+
+        The environment is terminated when the simulation is finished.
+
+        Returns:
+            bool: Termination of the environment.
+        """
+        return False
+
     def _get_reward(self) -> float:
         """
         Get the reward of the environment.
 
-        The total profit of the services.
+        The total profit of the services of a day is the reward.
 
         Returns:
             float: Reward of the environment.
         """
-        # think about how we can feed the reward in different components to the agent
+        # NOTE: Think about how we can feed the reward in different components to the agent
         # as we have multiple services, markets and seats, this information can be useful
+        # probably we need to normalize the reward too and add negative rewards as costs
         reward = sum(service.total_profit for service in self.kernel.supply.services)
+        reward -= self._last_total_profit
+        self._last_total_profit = sum(service.total_profit for service in self.kernel.supply.services)
         return reward
 
+    def _update_prices(self, action: list) -> None:
+        """
+        Update the prices of the services in the kernel supply by multiplying the price action by a factor.
+
+        Args:
+            action (list): Action to perform.
+        """
+        for service, action_service in zip(self.kernel.supply.services, action):
+            for price in action_service['prices']:
+                origin = self.kernel.supply.stations[price['origin']].id
+                destination = self.kernel.supply.stations[price['destination']].id
+                for seat in price['seats']:
+                    seat_type = self.kernel.supply.seats[seat['seat_type']]
+                    price_modification = seat['price'] * self.action_factor
+                    service.prices[(origin, destination)][seat_type] += price_modification
+
+    def _step(self, action: list) -> None:
+        """
+        Private method to perform an action in the environment.
+
+        Args:
+            action (list): Action to perform.
+        """
+        self._update_prices(action)
+        self.kernel.simulate_a_day()
+
     def step(self, action: list) -> Tuple[list, float, bool, bool, dict]:
-        # simulate a day
-        pprint(action, sort_dicts=False)
-        print(self._get_reward())
+        """
+        Perform an action in the environment.
+
+        Args:
+            action (list): Action to perform.
+        
+        Returns:
+            Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
+        """
+        self._step(action)
         obs = self._get_obs()
         reward = self._get_reward()
-        terminated = False
+        terminated = self._get_terminated()
         truncated = False
         info = self._get_info()
         return obs, reward, terminated, truncated, info
