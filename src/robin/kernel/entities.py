@@ -229,7 +229,7 @@ class Kernel:
             output_path: Union[Path, None] = None,
             departure_time_hard_restriction: bool = True,
             calculate_global_utility: bool = False
-        ) -> List[Service]:
+    ) -> List[Service]:
         """
         Simulate the demand-supply interaction.
 
@@ -259,7 +259,7 @@ class Kernel:
             output_path: Union[Path, None] = None,
             departure_time_hard_restriction: bool = True,
             calculate_global_utility: bool = False
-        ) -> List[Service]:
+    ) -> List[Service]:
         """
         Simulate the demand-supply interaction for a day.
         
@@ -278,7 +278,7 @@ class Kernel:
             List[Service]: List of services with updated tickets.
         """
         # Check if all days have been simulated
-        if self._simulation_day_idx > len(self.simulation_days):
+        if self._simulation_day_idx >= len(self.simulation_days):
             logging.warn('All days have been simulated, simulation will not continue.')
             return self.supply.services
         # Simulate demand-supply interaction for the next available purchase day
