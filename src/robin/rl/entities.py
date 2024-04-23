@@ -7,7 +7,7 @@ from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
 from pathlib import Path
-from typing import Union
+from typing import Tuple, Union
 from pprint import pprint
 
 
@@ -19,10 +19,14 @@ class FlattenAction(ActionWrapper):
         self.action_space = flatten_space(self.env.action_space)
         
     def action(self, action):
-        return flatten(self.env.action_space, action)
+        return unflatten(self.env.action_space, action)
 
     def reverse_action(self, action):
-        return unflatten(self.env.action_space, action)
+        return flatten(self.env.action_space, action)
+
+
+class FlattenObservation(FlattenObservation):
+    pass
 
 
 class RobinEnv(Env):
@@ -104,10 +108,16 @@ class RobinEnv(Env):
         """
         return {}
 
-    def step(self, action: list):
+    def step(self, action: list) -> Tuple[list, float, bool, bool, dict]:
         # simulate a day
         # calculate the reward
         pprint(action, sort_dicts=False)
+        obs = self._get_obs()
+        reward = 0
+        terminated = False
+        truncated = False
+        info = self._get_info()
+        return obs, reward, terminated, truncated, info
 
     def reset(self, seed: Union[int, None] = None, options = None) -> None:
         super().reset(seed=seed)
