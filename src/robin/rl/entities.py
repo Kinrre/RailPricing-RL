@@ -1,3 +1,7 @@
+"""Entities for the rl module."""
+
+import numpy as np
+
 from src.robin.kernel.entities import Kernel
 from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
 
@@ -128,7 +132,7 @@ class RobinEnv(Env):
         Returns:
             bool: Termination of the environment.
         """
-        return False
+        return self.kernel.is_simulation_finished
 
     def _get_reward(self) -> float:
         """
@@ -141,7 +145,7 @@ class RobinEnv(Env):
         """
         # NOTE: Think about how we can feed the reward in different components to the agent
         # as we have multiple services, markets and seats, this information can be useful
-        # probably we need to normalize the reward too and add negative rewards as costs
+        # probably we need to normalize the reward by the number of services and add negative rewards as costs
         reward = sum(service.total_profit for service in self.kernel.supply.services)
         reward -= self._last_total_profit
         self._last_total_profit = sum(service.total_profit for service in self.kernel.supply.services)
@@ -162,6 +166,9 @@ class RobinEnv(Env):
                     seat_type = self.kernel.supply.seats[seat['seat_type']]
                     price_modification = seat['price'] * self.action_factor
                     service.prices[(origin, destination)][seat_type] += price_modification
+                    # Clip the price to its range, so, it is not possible to have negative prices
+                    service.prices[(origin, destination)][seat_type] = \
+                        np.clip(service.prices[(origin, destination)][seat_type], LOW_PRICE, HIGH_PRICE)
 
     def _step(self, action: list) -> None:
         """
@@ -204,6 +211,7 @@ class RobinEnv(Env):
         """
         super().reset(seed=seed)
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
+        self._last_total_profit = 0
         obs = self._get_obs()
         info = self._get_info()
         return obs, info

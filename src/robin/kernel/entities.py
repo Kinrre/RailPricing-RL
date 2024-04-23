@@ -224,6 +224,16 @@ class Kernel:
         """
         return self.simulation_days[self._simulation_day_idx]
 
+    @property
+    def is_simulation_finished(self) -> bool:
+        """
+        Check if the simulation is finished.
+
+        Returns:
+            bool: True if the simulation is finished, False otherwise.
+        """
+        return self._simulation_day_idx >= len(self.simulation_days)
+
     def simulate(
             self,
             output_path: Union[Path, None] = None,
@@ -252,6 +262,7 @@ class Kernel:
             departure_time_hard_restriction=departure_time_hard_restriction,
             calculate_global_utility=calculate_global_utility
         )
+        self._simulation_day_idx = len(self.simulation_days)
         return self.supply.services
   
     def simulate_a_day(
@@ -278,7 +289,7 @@ class Kernel:
             List[Service]: List of services with updated tickets.
         """
         # Check if all days have been simulated
-        if self._simulation_day_idx >= len(self.simulation_days):
+        if self.is_simulation_finished:
             logging.warn('All days have been simulated, simulation will not continue.')
             return self.supply.services
         # Simulate demand-supply interaction for the next available purchase day
