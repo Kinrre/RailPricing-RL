@@ -6,4 +6,3 @@ HIGH_ACTION = 1
 
 LOW_PRICE = 0
 HIGH_PRICE = np.inf
-
