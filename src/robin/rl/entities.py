@@ -86,9 +86,8 @@ class RobinEnv(Env):
         Returns:
             list: Observation of the environment.
         """
-        obs = []
-        for service in self.kernel.supply.services:
-            obs.append({
+        obs = [
+            {
                 'line': self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id),
                 'corridor': self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id),
                 'time_slot': self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id),
@@ -109,7 +108,9 @@ class RobinEnv(Env):
                         'count': count
                     } for seat, count in seats.items()]
                 } for (origin, destination), seats in service.tickets_sold_pair_seats.items()]
-            })
+            }
+            for service in self.kernel.supply.services
+        ]
         return obs
 
     def _get_info(self) -> dict:
@@ -255,7 +256,7 @@ class RobinEnv(Env):
                                 'count': spaces.Discrete(service.rolling_stock.total_capacity)
                             }) for seat, _ in seats.items()
                         ])
-                    }) for (origin, destination), seats in service.prices.items()
+                    }) for (origin, destination), seats in service.tickets_sold_pair_seats.items()
                 ]),
             }) for service in self.kernel.supply.services
         ])
