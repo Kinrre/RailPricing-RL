@@ -147,6 +147,7 @@ class RobinEnv(Env):
         # NOTE: Think about how we can feed the reward in different components to the agent
         # as we have multiple services, markets and seats, this information can be useful
         # probably we need to normalize the reward by the number of services and add negative rewards as costs
+        # We can also promote the some specific services, such as direct services by adding a weight to the reward
         reward = sum(service.total_profit for service in self.kernel.supply.services)
         reward -= self._last_total_profit
         self._last_total_profit = sum(service.total_profit for service in self.kernel.supply.services)
@@ -160,12 +161,9 @@ class RobinEnv(Env):
             action (list): Action to perform.
         """
         for service, action_service in zip(self.kernel.supply.services, action):
-            for price in action_service['prices']:
-                origin = self.kernel.supply.stations[price['origin']].id
-                destination = self.kernel.supply.stations[price['destination']].id
-                for seat in price['seats']:
-                    seat_type = self.kernel.supply.seats[seat['seat_type']]
-                    price_modification = seat['price'] * self.action_factor
+            for ((origin, destination), seats), price in zip(service.prices.items(), action_service['prices']):
+                for seat_type, seat_price in zip(seats, price['seats']):
+                    price_modification = seat_price['price'] * self.action_factor
                     service.prices[(origin, destination)][seat_type] += price_modification
                     # Clip the price to its range, so, it is not possible to have negative prices
                     service.prices[(origin, destination)][seat_type] = \
@@ -230,30 +228,30 @@ class RobinEnv(Env):
                 # service already departed for an action mask?
                 # date time details? day of the week?
                 # capacity of the rolling stock?
-                'line':spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id)),
-                'corridor': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id)),
-                'time_slot': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id)),
-                'rolling_stock': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.rolling_stocks, service.rolling_stock.id)),
+                'line': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.lines, service.line.id)), high=idx, shape=(), dtype=np.int16),
+                'corridor': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.corridors, service.line.corridor.id)), high=idx, shape=(), dtype=np.int16),
+                'time_slot': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.time_slots, service.time_slot.id)), high=idx, shape=(), dtype=np.int16),
+                'rolling_stock': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.rolling_stocks, service.rolling_stock.id)), high=idx, shape=(), dtype=np.int16),
                 'prices': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
-                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
+                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.stations, origin)), high=idx, shape=(), dtype=np.int16),
+                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.stations, destination)), high=idx, shape=(), dtype=np.int16),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
-                                'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=())
+                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)), high=idx, shape=(), dtype=np.int16),
+                                'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=(), dtype=np.float16)
                             }) for seat, _ in seats.items()
                         ])
                     }) for (origin, destination), seats in service.prices.items()
                 ]),
                 'tickets_sold': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
-                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
+                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.stations, origin)), high=idx, shape=(), dtype=np.int16),
+                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.stations, destination)), high=idx, shape=(), dtype=np.int16),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
-                                'count': spaces.Discrete(service.rolling_stock.total_capacity)
+                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)), high=idx, shape=(), dtype=np.int16),
+                                'count': spaces.Box(low=0, high=service.rolling_stock.total_capacity, shape=(), dtype=np.int16)
                             }) for seat, _ in seats.items()
                         ])
                     }) for (origin, destination), seats in service.tickets_sold_pair_seats.items()
@@ -274,15 +272,12 @@ class RobinEnv(Env):
             spaces.Dict({
                 'prices': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, origin)),
-                        'destination': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.stations, destination)),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Discrete(1, start=self._get_element_idx_from_id(self.kernel.supply.seats, seat.id)),
-                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=()) # normalization of price modifications
-                            }) for seat, _ in seats.items()
+                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float16) # normalization of price modifications
+                            }) for _ in seats
                         ])
-                    }) for (origin, destination), seats in service.prices.items()
+                    }) for _, seats in service.prices.items()
                 ])
             }) for service in self.kernel.supply.services
         ])
