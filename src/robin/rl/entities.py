@@ -25,6 +25,7 @@ class FlattenAction(ActionWrapper):
         return unflatten(self.env.action_space, action)
 
     def reverse_action(self, action):
+        # NOTE: Not needed
         return flatten(self.env.action_space, action)
 
 
@@ -209,6 +210,7 @@ class RobinEnv(Env):
             Tuple[list, dict]: Observation and info of the environment.
         """
         super().reset(seed=seed)
+        # NOTE: If the config files are changed during the simulation, it will load the new ones, beware!
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         self._last_total_profit = 0
         obs = self._get_obs()
