@@ -95,7 +95,7 @@ demandPattern:
         potential_demand: randint
         potential_demand_kwargs:
           low: 60
-          high: 100
+          high: 101
         user_pattern_distribution:
           - id: 1
             percentage: 0.7
