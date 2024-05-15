@@ -6,7 +6,7 @@ from src.robin.kernel.entities import Kernel
 from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
 
 from functools import cached_property, lru_cache
-from gymnasium import ActionWrapper, Env
+from gymnasium import ActionWrapper, Env, ObservationWrapper
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
@@ -31,6 +31,41 @@ class FlattenAction(ActionWrapper):
 
 class FlattenObservation(FlattenObservation):
     pass
+
+
+class NormalizeObservation(ObservationWrapper):
+    """Observation wrapper that normalizes the observation space."""
+
+    def __init__(self, env: Env):
+        super().__init__(env)
+        self.n_lines = len(self.env.kernel.supply.lines)
+        self.n_corridors = len(self.env.kernel.supply.corridors)
+        self.n_time_slots = len(self.env.kernel.supply.time_slots)
+        self.n_rolling_stocks = len(self.env.kernel.supply.rolling_stocks)
+        self.n_stations = len(self.env.kernel.supply.stations)
+        self.n_seats = len(self.env.kernel.supply.seats)
+        self.max_price = HIGH_PRICE
+        self.max_capacity = max(self.env.kernel.supply.rolling_stocks, key=lambda x: x.total_capacity).total_capacity
+
+    def observation(self, observation):
+        for service in observation:
+            service['line'] /= self.n_lines
+            service['corridor'] /= self.n_corridors
+            service['time_slot'] /= self.n_time_slots
+            service['rolling_stock'] /= self.n_rolling_stocks
+            for price in service['prices']:
+                price['origin'] /= self.n_stations
+                price['destination'] /= self.n_stations
+                for seat in price['seats']:
+                    seat['seat_type'] /= self.n_seats
+                    seat['price'] /= self.max_price
+            for ticket_sold in service['tickets_sold']:
+                ticket_sold['origin'] /= self.n_stations
+                ticket_sold['destination'] /= self.n_stations
+                for seat in ticket_sold['seats']:
+                    seat['seat_type'] /= self.n_seats
+                    seat['count'] /= self.max_capacity
+        return observation
 
 
 class RobinEnv(Env):
