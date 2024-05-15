@@ -75,6 +75,7 @@ class RobinEnv(Env):
     Attributes:
         path_config_supply (Path): Path to the supply configuration file.
         path_config_demand (Path): Path to the demand configuration file.
+        departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
         kernel (Kernel): Kernel of the simulator.
         action_factor (int): Factor to multiply the price action.
     """
@@ -83,6 +84,7 @@ class RobinEnv(Env):
             self,
             path_config_supply: Path,
             path_config_demand: Path,
+            departure_time_hard_restriction: bool = False,
             action_factor: int = ACTION_FACTOR,
             seed: Union[int, None] = None
     ) -> None:
@@ -92,11 +94,13 @@ class RobinEnv(Env):
         Args:
             path_config_supply (Path): Path to the supply configuration file.
             path_config_demand (Path): Path to the demand configuration file.
+            departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
             seed (int, None): Seed for the random number generator.
             action_factor (int): Factor to multiply the price action.
         """
         self.path_config_supply = path_config_supply
         self.path_config_demand = path_config_demand
+        self.departure_time_hard_restriction = departure_time_hard_restriction
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         self.action_factor = action_factor
         self._last_total_profit = 0
@@ -213,7 +217,7 @@ class RobinEnv(Env):
             action (list): Action to perform.
         """
         self._update_prices(action)
-        self.kernel.simulate_a_day()
+        self.kernel.simulate_a_day(departure_time_hard_restriction=self.departure_time_hard_restriction)
 
     def step(self, action: list) -> Tuple[list, float, bool, bool, dict]:
         """
