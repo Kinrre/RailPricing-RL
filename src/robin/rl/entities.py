@@ -1,6 +1,8 @@
 """Entities for the rl module."""
 
 import numpy as np
+import os
+import random
 
 from src.robin.kernel.entities import Kernel
 from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
@@ -220,6 +222,17 @@ class RobinEnv(Env):
         obs = self._get_obs()
         info = self._get_info()
         return obs, info
+
+    def seed(self, seed: int) -> None:
+        """
+        Set seed for the random number generator.
+
+        Args:
+            seed (int): Seed for the random number generator.
+        """
+        random.seed(seed)
+        np.random.seed(seed)
+        os.environ['PYTHONHASHSEED'] = str(seed)
 
     @cached_property
     def observation_space(self) -> spaces.Space:
