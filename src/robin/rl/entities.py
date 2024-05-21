@@ -230,9 +230,7 @@ class RobinEnv(Env):
         Args:
             seed (int): Seed for the random number generator.
         """
-        random.seed(seed)
-        np.random.seed(seed)
-        os.environ['PYTHONHASHSEED'] = str(seed)
+        self.kernel.set_seed(seed)
 
     @cached_property
     def observation_space(self) -> spaces.Space:
