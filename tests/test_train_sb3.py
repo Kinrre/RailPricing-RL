@@ -36,6 +36,6 @@ if __name__ == '__main__':
     vec_env = VecNormalize.load(f'{log_dir}_1/vec_normalize.pkl', vec_env)
     vec_env.training = False
     vec_env.norm_reward = False
-    model = SAC.load(f'{log_dir}_1/{log_name}')
+    model = TD3.load(f'{log_dir}_1/{log_name}')
     mean_reward, std_reward = evaluate_policy(model, vec_env, n_eval_episodes=100)
     print(f'Mean reward: {mean_reward} +/- {std_reward}')
