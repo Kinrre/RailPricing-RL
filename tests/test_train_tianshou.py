@@ -85,7 +85,7 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
     # Environment
     torch.manual_seed(args.seed)
     env_fns = [
-        lambda seed=i: RobinEnvFactory.create(args.path_config_supply, args.path_config_demand, seed=seed) for i in range(args.training_num)
+        lambda: RobinEnvFactory.create(args.path_config_supply, args.path_config_demand, seed=args.seed + i * 1000) for i in range(args.training_num)
     ]
     env = SubprocVectorEnv(env_fns)
     env = VectorEnvNormObsReward(env)
