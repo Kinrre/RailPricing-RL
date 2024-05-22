@@ -1,8 +1,7 @@
 """Entities for the rl module."""
 
 import numpy as np
-import os
-import random
+import torch
 
 from src.robin.kernel.entities import Kernel
 from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
@@ -13,6 +12,10 @@ from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
 from pathlib import Path
+from tianshou.env import VectorEnvNormObs
+from tianshou.env.venvs import BaseVectorEnv
+from tianshou.utils import RunningMeanStd
+from tianshou.env.utils import gym_new_venv_step_type
 from typing import Tuple, Union
 
 
@@ -33,6 +36,55 @@ class FlattenAction(ActionWrapper):
 
 class FlattenObservation(FlattenObservation):
     pass
+
+
+class VectorEnvNormObsReward(VectorEnvNormObs):
+    """
+    Vector environment with normalized observations and rewards.
+
+    Attributes:
+        reward_rms (RunningMeanStd): Running mean/std for the rewards.
+        update_reward_rms (bool): Whether to update the reward running mean/std.
+    """
+
+    def __init__(self, venv: BaseVectorEnv, update_obs_rms: bool = True, update_reward_rms: bool = True) -> None:
+        """
+        Initialize the vector environment with normalized observations and rewards.
+
+        Args:
+            venv (BaseVectorEnv): Vector environment.
+            update_obs_rms (bool): Whether to update the observation running mean/std.
+            update_reward_rms (bool): Whether to update the reward running mean/std.
+        """
+        super().__init__(venv, update_obs_rms)
+        self.update_reward_rms = update_reward_rms
+        self.reward_rms = RunningMeanStd()
+
+    def step(
+        self,
+        action: np.ndarray | torch.Tensor,
+        id: int | list[int] | np.ndarray | None = None,
+    ) -> gym_new_venv_step_type:
+        # Normalize observation
+        step_results = super().step(action, id)
+        # Normalize reward
+        if self.reward_rms and self.update_reward_rms:
+            self.reward_rms.update(step_results[1])
+        return (step_results[0], self._norm_reward(step_results[1]), *step_results[2:])
+    
+    def _norm_reward(self, reward: float) -> np.ndarray:
+        """Normalize the reward."""
+        if self.reward_rms:
+            return self.reward_rms.norm(reward)
+        return reward
+
+    def set_reward_rms(self, reward_rms: RunningMeanStd) -> None:
+        """Set with given reward running mean/std."""
+        self.reward_rms = reward_rms
+    
+    def get_reward_rms(self) -> RunningMeanStd:
+        """Return reward running mean/std."""
+        return self.reward_rms
 
 
 class RobinEnv(Env):
@@ -71,6 +123,7 @@ class RobinEnv(Env):
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         self.action_factor = action_factor
         self._last_total_profit = 0
+        self.seed(seed)
 
     @lru_cache(maxsize=None)
     def _get_element_idx_from_id(self, elements: tuple, id: str) -> int:
@@ -291,7 +344,7 @@ class RobinEnv(Env):
                     spaces.Dict({
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float16) # normalization of price modifications
+                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float16)
                             }) for _ in seats
                         ])
                     }) for _, seats in service.prices.items()
@@ -299,3 +352,38 @@ class RobinEnv(Env):
             }) for service in self.kernel.supply.services
         ])
         return action_space
+
+
+class RobinEnvFactory:
+
+    @staticmethod
+    def create(
+            path_config_supply: Path,
+            path_config_demand: Path,
+            departure_time_hard_restriction: bool = False,
+            action_factor: int = ACTION_FACTOR,
+            seed: Union[int, None] = None
+    ) -> RobinEnv:
+        """
+        Create a Robin environment.
+
+        Args:
+            path_config_supply (Path): Path to the supply configuration file.
+            path_config_demand (Path): Path to the demand configuration file.
+            departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
+            seed (int, None): Seed for the random number generator.
+            action_factor (int): Factor to multiply the price action.
+        
+        Returns:
+            RobinEnv: Robin environment.
+        """
+        env = RobinEnv(
+            path_config_supply=path_config_supply,
+            path_config_demand=path_config_demand,
+            departure_time_hard_restriction=departure_time_hard_restriction,
+            action_factor=action_factor,
+            seed=seed
+        )
+        env = FlattenObservation(env)
+        env = FlattenAction(env)
+        return env
