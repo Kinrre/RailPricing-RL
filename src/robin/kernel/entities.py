@@ -234,6 +234,20 @@ class Kernel:
         """
         return self._simulation_day_idx >= len(self.simulation_days)
 
+    def filter_supply_by_tsp(self, tsp_id: str) -> Supply:
+        """
+        Filters the supply object by TSP and creates a new supply object.
+
+        Args:
+            tsp (TSP): TSP object.
+
+        Returns:
+            Supply: Supply object filtered by TSP.
+        """
+        services = self.supply.filter_services_by_tsp(tsp_id=tsp_id)
+        supply = Supply(services=services)
+        return supply
+
     def simulate(
             self,
             output_path: Union[Path, None] = None,

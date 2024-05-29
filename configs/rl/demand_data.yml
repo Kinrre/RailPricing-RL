@@ -98,9 +98,9 @@ demandPattern:
           high: 101
         user_pattern_distribution:
           - id: 1
-            percentage: 0.7
+            percentage: 1.0
           - id: 2
-            percentage: 0.3
+            percentage: 0.0
 
 day:
   - id: 1

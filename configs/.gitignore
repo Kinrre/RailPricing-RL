@@ -37,3 +37,4 @@
 !rl
 !rl/demand_data.yml
 !rl/supply_data.yml
+!rl/supply_data_multi_agent.yml
