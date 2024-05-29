@@ -299,30 +299,30 @@ class RobinEnv(ABC, Env):
                 # service already departed for an action mask?
                 # date time details? day of the week?
                 # capacity of the rolling stock?
-                'line': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.lines, service.line.id)), high=idx, shape=(), dtype=np.int16),
-                'corridor': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.corridors, service.line.corridor.id)), high=idx, shape=(), dtype=np.int16),
-                'time_slot': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.time_slots, service.time_slot.id)), high=idx, shape=(), dtype=np.int16),
-                'rolling_stock': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.rolling_stocks, service.rolling_stock.id)), high=idx, shape=(), dtype=np.int16),
+                'line': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.lines, service.line.id)), high=idx, shape=(), dtype=np.int32),
+                'corridor': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.corridors, service.line.corridor.id)), high=idx, shape=(), dtype=np.int32),
+                'time_slot': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.time_slots, service.time_slot.id)), high=idx, shape=(), dtype=np.int32),
+                'rolling_stock': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.rolling_stocks, service.rolling_stock.id)), high=idx, shape=(), dtype=np.int32),
                 'prices': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, origin)), high=idx, shape=(), dtype=np.int16),
-                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, destination)), high=idx, shape=(), dtype=np.int16),
+                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, origin)), high=idx, shape=(), dtype=np.int32),
+                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, destination)), high=idx, shape=(), dtype=np.int32),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.seats, seat.id)), high=idx, shape=(), dtype=np.int16),
-                                'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=(), dtype=np.float16)
+                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.seats, seat.id)), high=idx, shape=(), dtype=np.int32),
+                                'price': spaces.Box(low=LOW_PRICE, high=HIGH_PRICE, shape=(), dtype=np.float32)
                             }) for seat, _ in seats.items()
                         ])
                     }) for (origin, destination), seats in service.prices.items()
                 ]),
                 'tickets_sold': spaces.Tuple([
                     spaces.Dict({
-                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, origin)), high=idx, shape=(), dtype=np.int16),
-                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, destination)), high=idx, shape=(), dtype=np.int16),
+                        'origin': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, origin)), high=idx, shape=(), dtype=np.int32),
+                        'destination': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.stations, destination)), high=idx, shape=(), dtype=np.int32),
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.seats, seat.id)), high=idx, shape=(), dtype=np.int16),
-                                'count': spaces.Box(low=0, high=service.rolling_stock.total_capacity, shape=(), dtype=np.int16)
+                                'seat_type': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.seats, seat.id)), high=idx, shape=(), dtype=np.int32),
+                                'count': spaces.Box(low=0, high=service.rolling_stock.total_capacity, shape=(), dtype=np.int32)
                             }) for seat, _ in seats.items()
                         ])
                     }) for (origin, destination), seats in service.tickets_sold_pair_seats.items()
@@ -348,7 +348,7 @@ class RobinEnv(ABC, Env):
                     spaces.Dict({
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float16)
+                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float32)
                             }) for _ in seats
                         ])
                     }) for _, seats in service.prices.items()
@@ -476,7 +476,7 @@ class RobinMultiAgentEnv(RobinEnv):
         self._last_total_profit[agent_idx] = total_profit
         return reward
 
-    def step(self, action: list) -> Tuple[NDArray, NDArray[np.float16], NDArray[np.bool_], NDArray[np.bool_], dict]:
+    def step(self, action: list) -> Tuple[NDArray, NDArray[np.float32], NDArray[np.bool_], NDArray[np.bool_], dict]:
         """
         Perform an action in the environment.
 
