@@ -22,7 +22,7 @@ userPattern:
         utility: 20
     train_service_providers:
       - id: 1
-        utility: 3
+        utility: 0 # 3 if Business passengers prefer Renfe
       - id: 2
         utility: 0
     penalty_arrival_time: polynomial
@@ -63,7 +63,7 @@ userPattern:
         utility: 15
     train_service_providers:
       - id: 1
-        utility: 1
+        utility: 0 # 1 if Student passengers prefer Renfe
       - id: 2
         utility: 0
     penalty_arrival_time: polynomial

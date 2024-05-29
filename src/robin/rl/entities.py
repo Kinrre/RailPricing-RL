@@ -446,6 +446,7 @@ class RobinMultiAgentEnv(RobinEnv):
 
     Attributes:
         possible_agents (list): Possible agents in the environment.
+        num_agents (int): Number of agents in the environment.
         supplies (list[Supply]): Supplies of the agents.
     """
 
@@ -455,6 +456,7 @@ class RobinMultiAgentEnv(RobinEnv):
         """
         super().__init__(*args, **kwargs)
         self.possible_agents = [tsp.name for tsp in self.kernel.supply.tsps]
+        self.num_agents = len(self.possible_agents)
         self.supplies = [self.kernel.filter_supply_by_tsp(tsp.id) for tsp in self.kernel.supply.tsps]
         self._last_total_profit = [0 for _ in self.possible_agents]
 

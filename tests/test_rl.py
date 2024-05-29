@@ -1,25 +1,83 @@
 import numpy as np
 
+from gymnasium import Env
 from src.robin.rl.entities import RobinEnvFactory
 
-env = RobinEnvFactory.create(path_config_demand='configs/rl/demand_data.yml', path_config_supply='configs/rl/supply_data.yml')
-print(f'Number of services: {len(env.kernel.supply.services)}')
-print(env.observation_space)
-print(env.action_space)
+DEFAULT_CONFIG_DEMAND = 'configs/rl/demand_data.yml'
+DEFAULT_CONFIG_SUPPLY = 'configs/rl/supply_data.yml'
+DEFAULT_CONFIG_SUPPLY_MULTI_AGENT = 'configs/rl/supply_data_multi_agent.yml'
+MULTI_AGENT = True
+DEFAULT_NUM_STEPS = 1_000
+SEED = 0
 
-observation, info = env.reset()
-rewards = []
-episodic_reward = 0
 
-for i in range(1_000):
-    action = env.action_space.sample()
-    observation, reward, terminated, truncated, info = env.step(action)
-    episodic_reward += reward
+def test_env(env: Env, num_steps: int = DEFAULT_NUM_STEPS) -> None:
+    """
+    Test the environment with a random agent.
 
-    if terminated or truncated:
-        observation, info = env.reset()
-        rewards.append(episodic_reward)
-        episodic_reward = 0
+    Args:
+        env (Env): The environment to test.
+        num_steps (int): The number of steps to run the environment.
+    """
+    observation, info = env.reset()
+    rewards = []
+    episodic_reward = 0
 
-env.close()
-print(f'Mean episodic reward (random agent): {np.mean(rewards)} +/- {np.std(rewards)}')
+    for i in range(num_steps):
+        action = env.action_space.sample()
+        observation, reward, terminated, truncated, info = env.step(action)
+        episodic_reward += reward
+
+        if terminated or truncated:
+            observation, info = env.reset()
+            rewards.append(episodic_reward)
+            episodic_reward = 0
+
+    env.close()
+    print(f'Mean episodic reward (random agent): {np.mean(rewards)} +/- {np.std(rewards)}')
+
+
+def test_multi_agent_env(env: Env, num_steps: int = DEFAULT_NUM_STEPS) -> None:
+    """
+    Test the multi-agent environment with random agents.
+
+    Args:
+        env (Env): The environment to test.
+        num_steps (int): The number of steps to run the environment.
+    """
+    observation, info = env.reset()
+    rewards = [[] for _ in range(env.num_agents)]
+    episodic_reward = np.zeros((env.num_agents), dtype=np.float32)
+
+    for i in range(num_steps):
+        action = env.action_space.sample()
+        observation, reward, terminated, truncated, info = env.step(action)
+        episodic_reward += reward
+
+        if terminated.all() or truncated.all():
+            observation, info = env.reset()
+            for i in range(env.num_agents):
+                rewards[i].append(episodic_reward[i])
+            episodic_reward = np.zeros((env.num_agents), dtype=np.float32)
+
+    env.close()
+    for i, agent in enumerate(env.possible_agents):
+        print(f'{agent} - Mean episodic reward (random agent): {np.mean(rewards[i])} +/- {np.std(rewards[i])}')
+
+
+if __name__ == '__main__':
+    config_supply = DEFAULT_CONFIG_SUPPLY_MULTI_AGENT if MULTI_AGENT else DEFAULT_CONFIG_SUPPLY
+    env = RobinEnvFactory.create(
+        path_config_demand=DEFAULT_CONFIG_DEMAND,
+        path_config_supply=config_supply,
+        multi_agent=MULTI_AGENT,
+        seed=SEED
+    )
+    print(f'Number of services: {len(env.kernel.supply.services)}')
+    print(env.observation_space)
+    print(env.action_space)
+    
+    if MULTI_AGENT:
+        test_multi_agent_env(env)
+    else:
+        test_env(env)
