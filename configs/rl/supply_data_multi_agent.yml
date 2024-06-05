@@ -149,6 +149,10 @@ trainServiceProvider:
   name: Ouigo
   rolling_stock:
   - '1'
+- id: '3'
+  name: Iryo
+  rolling_stock:
+  - '1'
 
 timeSlot:
 - id: '45010'
@@ -369,6 +373,82 @@ service:
   date: '2023-09-06'
   line: '6'
   train_service_provider: '2'
+  time_slot: '111010'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 100.0
+    - seat: '2'
+      price: 150.0
+  capacity_constraints: null
+# This service is from last year to test actions that are irrelevant
+- id: 5_06-09-2022-06.15_c
+  date: '2022-09-06'
+  line: '5'
+  train_service_provider: '3'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 50.0
+    - seat: '2'
+      price: 75.0
+  capacity_constraints: null
+- id: 5_06-09-2023-06.15_c
+  date: '2023-09-06'
+  line: '5'
+  train_service_provider: '3'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 70.0
+    - seat: '2'
+      price: 115.0
+  capacity_constraints: null
+- id: 6_06-09-2023-06.15_c
+  date: '2023-09-06'
+  line: '6'
+  train_service_provider: '3'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 100.0
+    - seat: '2'
+      price: 150.0
+  capacity_constraints: null
+- id: 5_06-09-2023-18.30_c
+  date: '2023-09-06'
+  line: '5'
+  train_service_provider: '3'
+  time_slot: '111010'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: '1'
+    destination: '4'
+    seats:
+    - seat: '1'
+      price: 70.0
+    - seat: '2'
+      price: 115.0
+  capacity_constraints: null
+- id: 6_06-09-2023-18.30_c
+  date: '2023-09-06'
+  line: '6'
+  train_service_provider: '3'
   time_slot: '111010'
   rolling_stock: '1'
   origin_destination_tuples:

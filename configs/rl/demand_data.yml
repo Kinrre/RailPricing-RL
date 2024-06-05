@@ -25,6 +25,8 @@ userPattern:
         utility: 0 # 3 if Business passengers prefer Renfe
       - id: 2
         utility: 0
+      - id: 3
+        utility: 0
     penalty_arrival_time: polynomial
     penalty_arrival_time_kwargs:
       b_0: 0
@@ -65,6 +67,8 @@ userPattern:
       - id: 1
         utility: 0 # 1 if Student passengers prefer Renfe
       - id: 2
+        utility: 0
+      - id: 3
         utility: 0
     penalty_arrival_time: polynomial
     penalty_arrival_time_kwargs:
