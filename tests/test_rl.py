@@ -45,23 +45,24 @@ def test_multi_agent_env(env: Env, num_steps: int = DEFAULT_NUM_STEPS) -> None:
         env (Env): The environment to test.
         num_steps (int): The number of steps to run the environment.
     """
+    num_agents = env.unwrapped.num_agents
     observation, info = env.reset()
-    rewards = [[] for _ in range(env.num_agents)]
-    episodic_reward = np.zeros((env.num_agents), dtype=np.float32)
+    rewards = [[] for _ in range(num_agents)]
+    episodic_reward = np.zeros((num_agents), dtype=np.float32)
 
     for i in range(num_steps):
-        action = env.action_space.sample()
-        observation, reward, terminated, truncated, info = env.step(action)
+        actions = [action_space.sample() for action_space in env.action_space]
+        observation, reward, terminated, truncated, info = env.step(actions)
         episodic_reward += reward
 
         if terminated.all() or truncated.all():
             observation, info = env.reset()
-            for i in range(env.num_agents):
+            for i in range(num_agents):
                 rewards[i].append(episodic_reward[i])
-            episodic_reward = np.zeros((env.num_agents), dtype=np.float32)
+            episodic_reward = np.zeros((num_agents), dtype=np.float32)
 
     env.close()
-    for i, agent in enumerate(env.possible_agents):
+    for i, agent in enumerate(env.unwrapped.agents):
         print(f'{agent} - Mean episodic reward (random agent): {np.mean(rewards[i])} +/- {np.std(rewards[i])}')
 
 
@@ -73,7 +74,7 @@ if __name__ == '__main__':
         multi_agent=MULTI_AGENT,
         seed=SEED
     )
-    print(f'Number of services: {len(env.kernel.supply.services)}')
+    print(f'Number of services: {len(env.unwrapped.kernel.supply.services)}')
     print(env.observation_space)
     print(env.action_space)
     

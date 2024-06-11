@@ -9,7 +9,7 @@ from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_P
 
 from abc import ABC, abstractmethod
 from functools import cached_property, lru_cache
-from gymnasium import ActionWrapper, Env
+from gymnasium import ActionWrapper, Env, ObservationWrapper
 from gymnasium import spaces
 from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
@@ -32,13 +32,31 @@ class FlattenAction(ActionWrapper):
     def action(self, action):
         return unflatten(self.env.action_space, action)
 
-    def reverse_action(self, action):
-        # NOTE: Not needed
-        return flatten(self.env.action_space, action)
+
+class FlattenMultiAction(ActionWrapper):
+    """Action wrapper that flattens the action space for multiple agents."""
+
+    def __init__(self, env: Env):
+        super().__init__(env)
+        self.action_space = [flatten_space(space) for space in self.env.action_space]
+
+    def action(self, action: list):
+        return [unflatten(space, act) for space, act in zip(self.env.action_space, action)]
 
 
 class FlattenObservation(FlattenObservation):
     pass
+
+
+class FlattenMultiObservation(ObservationWrapper):
+    """Observation wrapper that flattens the observation space for multiple agents."""
+
+    def __init__(self, env: Env):
+        super().__init__(env)
+        self.observation_space = [flatten_space(space) for space in self.env.observation_space]
+
+    def observation(self, observation: list):
+        return [flatten(space, obs) for space, obs in zip(self.env.observation_space, observation)]
 
 
 class VectorEnvNormObsReward(VectorEnvNormObs):
@@ -65,8 +83,8 @@ class VectorEnvNormObsReward(VectorEnvNormObs):
 
     def step(
         self,
-        action: np.ndarray | torch.Tensor,
-        id: int | list[int] | np.ndarray | None = None,
+        action: Union[np.ndarray, torch.Tensor],
+        id: Union[int, list[int], np.ndarray, None] = None,
     ) -> gym_new_venv_step_type:
         # Normalize observation
         step_results = super().step(action, id)
@@ -445,7 +463,7 @@ class RobinMultiAgentEnv(RobinEnv):
     Reinforcement learning multi-agent environment for the Robin simulator.
 
     Attributes:
-        possible_agents (list): Possible agents in the environment.
+        agents (list): Agents in the environment.
         num_agents (int): Number of agents in the environment.
         supplies (list[Supply]): Supplies of the agents.
     """
@@ -455,10 +473,10 @@ class RobinMultiAgentEnv(RobinEnv):
         Initialize the multi-agent environment.
         """
         super().__init__(*args, **kwargs)
-        self.possible_agents = [tsp.name for tsp in self.kernel.supply.tsps]
-        self.num_agents = len(self.possible_agents)
+        self.agents = [tsp.name for tsp in self.kernel.supply.tsps]
+        self.num_agents = len(self.agents)
         self.supplies = [self.kernel.filter_supply_by_tsp(tsp.id) for tsp in self.kernel.supply.tsps]
-        self._last_total_profit = [0 for _ in self.possible_agents]
+        self._last_total_profit = [0 for _ in self.agents]
 
     def _get_reward(self, agent_idx: int, supply: Supply) -> float:
         """
@@ -489,7 +507,7 @@ class RobinMultiAgentEnv(RobinEnv):
             Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
         """
         self._step(action=action, supply=self.supplies)
-        obs = np.array([self._get_obs(supply=supply) for supply in self.supplies])
+        obs = np.array([self._get_obs(supply=supply) for supply in self.supplies], dtype=object)
         reward = np.array([self._get_reward(agent_idx, supply) for agent_idx, supply in enumerate(self.supplies)])
         _terminated = self._get_terminated() # The terminated condition is the same for all agents
         terminated = np.array([_terminated for _ in self.supplies])
@@ -511,7 +529,7 @@ class RobinMultiAgentEnv(RobinEnv):
         super().reset(seed=seed, options=options)
         # It is necessary to re-create the supplies with the new services references as the Kernel object is re-created
         self.supplies = [self.kernel.filter_supply_by_tsp(tsp.id) for tsp in self.kernel.supply.tsps]
-        self._last_total_profit = [0 for _ in self.possible_agents]
+        self._last_total_profit = [0 for _ in self.agents]
         obs = [self._get_obs(supply=supply) for supply in self.supplies]
         info = self._get_info()
         return obs, info
@@ -578,6 +596,8 @@ class RobinEnvFactory:
                 action_factor=action_factor,
                 seed=seed
             )
+            env = FlattenMultiObservation(env)
+            env = FlattenMultiAction(env)
         else:
             env = RobinSingleAgentEnv(
                 path_config_supply=path_config_supply,
@@ -586,6 +606,6 @@ class RobinEnvFactory:
                 action_factor=action_factor,
                 seed=seed
             )
-        env = FlattenObservation(env)
-        env = FlattenAction(env)
+            env = FlattenObservation(env)
+            env = FlattenAction(env)
         return env
