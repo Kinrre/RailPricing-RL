@@ -4,9 +4,9 @@ import datetime
 import numpy as np
 import yaml
 
-from .constants import DEFAULT_SEAT_UTILITY, DEFAULT_TSP_UTILITY, DEFAULT_RVS_SIZE
-from .exceptions import InvalidForbiddenDepartureHoursException
-from .utils import get_function, get_scipy_distribution
+from robin.demand.constants import DEFAULT_SEAT_UTILITY, DEFAULT_TSP_UTILITY, DEFAULT_RVS_SIZE
+from robin.demand.exceptions import InvalidForbiddenDepartureHoursException
+from robin.demand.utils import get_function, get_scipy_distribution
 
 from pathlib import Path
 from typing import Any, List, Mapping, Union, Tuple

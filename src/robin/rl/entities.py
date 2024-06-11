@@ -3,9 +3,9 @@
 import numpy as np
 import torch
 
-from src.robin.kernel.entities import Kernel
-from src.robin.supply.entities import Supply
-from src.robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
+from robin.kernel.entities import Kernel
+from robin.supply.entities import Supply
+from robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
 
 from abc import ABC, abstractmethod
 from functools import cached_property, lru_cache

@@ -7,10 +7,10 @@ import pandas as pd
 import shutil
 import yaml
 
-from .constants import *
-from .exceptions import InvalidArrivalTimeDistribution, InvalidPenaltyFunction
-from src.robin.kernel.entities import Kernel
-from src.robin.supply.entities import Supply
+from robin.calibration.constants import *
+from robin.calibration.exceptions import InvalidArrivalTimeDistribution, InvalidPenaltyFunction
+from robin.kernel.entities import Kernel
+from robin.supply.entities import Supply
 
 from sklearn.metrics import mean_squared_error
 from typing import Any, Dict, List, Tuple, Union

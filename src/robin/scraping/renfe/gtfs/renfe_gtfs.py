@@ -1,4 +1,4 @@
-from src.scraping.renfe.gtfs.renfegtfstools import *
+from robin.scraping.renfe.gtfs.renfegtfstools import *
 
 savepath = 'renfe_data/'
 url = 'https://ssl.renfe.com/gtransit/Fichero_AV_LD/google_transit.zip'

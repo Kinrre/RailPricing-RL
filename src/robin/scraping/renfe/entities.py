@@ -8,7 +8,7 @@ import re
 import requests
 import unicodedata
 
-from src.robin.scraping.renfe.utils import format_duration, is_number, remove_blanks, time_to_minutes
+from robin.scraping.renfe.utils import format_duration, is_number, remove_blanks, time_to_minutes
 
 from bs4 import BeautifulSoup
 from selenium import webdriver
