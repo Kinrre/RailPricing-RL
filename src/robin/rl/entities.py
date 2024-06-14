@@ -8,6 +8,7 @@ from robin.supply.entities import Supply
 from robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
 
 from abc import ABC, abstractmethod
+from copy import deepcopy
 from functools import cached_property, lru_cache
 from gymnasium import ActionWrapper, Env, ObservationWrapper
 from gymnasium import spaces
@@ -171,6 +172,7 @@ class RobinEnv(ABC, Env):
         """
         obs = [
             {
+                'tsp': self._get_element_idx_from_id(supply.tsps, service.tsp.id),
                 'line': self._get_element_idx_from_id(supply.lines, service.line.id),
                 'corridor': self._get_element_idx_from_id(supply.corridors, service.line.corridor.id),
                 'time_slot': self._get_element_idx_from_id(supply.time_slots, service.time_slot.id),
@@ -317,6 +319,7 @@ class RobinEnv(ABC, Env):
                 # service already departed for an action mask?
                 # date time details? day of the week?
                 # capacity of the rolling stock?
+                'tsp': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.tsps, service.tsp.id)), high=idx, shape=(), dtype=np.int32),
                 'line': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.lines, service.line.id)), high=idx, shape=(), dtype=np.int32),
                 'corridor': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.corridors, service.line.corridor.id)), high=idx, shape=(), dtype=np.int32),
                 'time_slot': spaces.Box(low=(idx := self._get_element_idx_from_id(supply.time_slots, service.time_slot.id)), high=idx, shape=(), dtype=np.int32),
@@ -463,7 +466,7 @@ class RobinMultiAgentEnv(RobinEnv):
     Reinforcement learning multi-agent environment for the Robin simulator.
 
     Attributes:
-        agents (list): Agents in the environment.
+        agents (list[str]): Agents in the environment.
         num_agents (int): Number of agents in the environment.
         supplies (list[Supply]): Supplies of the agents.
     """
@@ -477,6 +480,23 @@ class RobinMultiAgentEnv(RobinEnv):
         self.num_agents = len(self.agents)
         self.supplies = [self.kernel.filter_supply_by_tsp(tsp.id) for tsp in self.kernel.supply.tsps]
         self._last_total_profit = [0 for _ in self.agents]
+
+    def _get_obs(self) -> list:
+        """
+        Get the observation of the environment.
+
+        Returns:
+            list: Observation of the environment.
+        """
+        observation = []
+        full_observation = super()._get_obs(supply=self.kernel.supply)
+        for agent in self.agents:
+            obs = deepcopy(full_observation)
+            for service in obs:
+                if service['tsp'] != self.agents.index(agent):
+                    service.pop('tickets_sold')
+            observation.append(obs)
+        return np.array(observation, dtype=object)
 
     def _get_reward(self, agent_idx: int, supply: Supply) -> float:
         """
@@ -507,7 +527,7 @@ class RobinMultiAgentEnv(RobinEnv):
             Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
         """
         self._step(action=action, supply=self.supplies)
-        obs = np.array([self._get_obs(supply=supply) for supply in self.supplies], dtype=object)
+        obs = self._get_obs()
         reward = np.array([self._get_reward(agent_idx, supply) for agent_idx, supply in enumerate(self.supplies)])
         _terminated = self._get_terminated() # The terminated condition is the same for all agents
         terminated = np.array([_terminated for _ in self.supplies])
@@ -530,7 +550,7 @@ class RobinMultiAgentEnv(RobinEnv):
         # It is necessary to re-create the supplies with the new services references as the Kernel object is re-created
         self.supplies = [self.kernel.filter_supply_by_tsp(tsp.id) for tsp in self.kernel.supply.tsps]
         self._last_total_profit = [0 for _ in self.agents]
-        obs = [self._get_obs(supply=supply) for supply in self.supplies]
+        obs = self._get_obs()
         info = self._get_info()
         return obs, info
 
@@ -539,13 +559,23 @@ class RobinMultiAgentEnv(RobinEnv):
         """
         Observation space of the environment.
 
+        Each agent has the their own observation from the full observation space,
+        except the tickets_sold key is removed if the tsp key is not from the agent.
+
         Returns:
             spaces.Space: Observation space of each agent in the environment.
         """
-        # List comprehension can't be used with super() method
         observation_spaces = []
-        for supply in self.supplies:
-            observation_spaces.append(super().observation_space(supply=supply))
+        full_observation_space = super().observation_space(supply=self.kernel.supply)
+        for agent in self.agents:
+            # As the observation space is a Tuple space, it is necessary to convert it to a list to modify it
+            observation_space = list(deepcopy(full_observation_space))
+            for i, service in enumerate(observation_space):
+                if service['tsp'].low != self.agents.index(agent):
+                    # It is not possible to directly remove the key from the Dict space
+                    service = spaces.Dict({key: value for key, value in service.items() if key != 'tickets_sold'})
+                    observation_space[i] = service
+            observation_spaces.append(spaces.Tuple(observation_space))
         return spaces.Tuple(observation_spaces)
 
     @cached_property
