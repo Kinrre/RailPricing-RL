@@ -223,6 +223,7 @@ class Line:
         timetable (Mapping[str, Tuple[float, float]]): Dict with pairs of stations (origin, destination)
             with (origin ID, destination ID) as keys, and (origin time, destination time) as values.
         stations (List[Station]): List of Stations being served by the Line.
+        stations_ids (List[str]): List of Station IDs being served by the Line.
         pairs (Mapping[Tuple[str, str], Tuple[Station, Station]]): Dict with pairs of stations (origin, destination)
             with (origin ID, destination ID) as keys, and (origin Station, destination Station) as values.
     """
@@ -243,6 +244,7 @@ class Line:
         self.corridor = corridor
         self.timetable = timetable
         self.stations = list(map(lambda sid: self.corridor.stations[sid], list(self.timetable.keys())))
+        self.stations_ids = [station.id for station in self.stations]
         self.pairs = self._get_pairs()
 
     def _get_pairs(self) -> Dict[Tuple[str, str], Tuple[Station, Station]]:
@@ -517,7 +519,6 @@ class Service:
             Set[Tuple[str, str]]: Set of pairs affected by origin-destination selection.
         """
         pairs = list(self.line.pairs.keys())
-        stations_ids = [station .id for station in self.line.stations]
         # Get the index of the first pair which includes the origin station
         start_index = 0
         for i, pair in enumerate(pairs):
@@ -533,9 +534,9 @@ class Service:
 
         affected_pairs = pairs[start_index:end_index]
         # Get stations between selected origin-destination
-        origin_index = stations_ids.index(origin) + 1
-        destination_index = stations_ids.index(destination)
-        intermediate_stations = stations_ids[origin_index:destination_index]
+        origin_index = self.line.stations_ids.index(origin) + 1
+        destination_index = self.line.stations_ids.index(destination)
+        intermediate_stations = self.line.stations_ids[origin_index:destination_index]
         # Include pairs which depart between selected origin-destination
         affected_pairs.extend([pair for pair in pairs if pair[0] in intermediate_stations])
         return set(affected_pairs)
@@ -717,9 +718,13 @@ class Supply:
                 return service
 
     @lru_cache(maxsize=None)
-    def filter_services(self, origin: str, destination: str, date: datetime.date) -> List[Service]:
+    def filter_services(self, origin: str, destination: str, date: datetime.date) -> List[Tuple[str, Service, str]]:
         """
         Filters a List of Services available in the system that meet the users requirements.
+
+        It uses a Breadth-First Search algorithm to find all the possible paths between the origin and destination
+        stations. The algorithm starts at the origin station and explores all the possible paths until the destination
+        station is reached.
 
         Args:
             origin (str): Origin Station ID.
@@ -727,14 +732,43 @@ class Supply:
             date (datetime.date): Date of service (day, month, year, without time).
 
         Returns:
-            List[Service]: List of Service objects that meet the user requests.
+            filtered_services (List[Tuple[str, Service, str]]): List of tuples with origin, service and destination of
+                each service used.
         """
+        # Get all the possible paths that start at the origin station, so, last station is dropped
+        services = [service for service in self.services if service.date == date]
+        possible_paths = [[(origin, service)] for service in services if origin in service.line.stations_ids[:-1]]
         filtered_services = []
-        for service in self.services:
-            if service.date == date and (origin, destination) in service.prices.keys():
-                filtered_services.append(service)
-        return filtered_services
 
+        while possible_paths:
+            # Get the first path in the list with the last station and service
+            path = possible_paths.pop(0)
+            last_station, last_service = path[-1]
+            
+            # Get the list of stations for the last service in the current path starting after the current station
+            current_station_index = last_service.line.stations_ids.index(last_station)
+            subsequent_stations = last_service.line.stations_ids[current_station_index + 1:]
+
+            # Check if the destination is in the current path
+            if destination in subsequent_stations:
+                # Reconstruction of the path to have the origin and destination stations of each service used
+                complete_path = path + [(destination, None)]
+                formatted_path = [(complete_path[i][0], complete_path[i][1], complete_path[i + 1][0]) for i in range(len(complete_path) - 1)]
+                filtered_services.append(formatted_path)
+                continue
+            
+            # Extend the path with new services starting from any subsequent station
+            for station in subsequent_stations:
+                for service in services:
+                    # Check that the new service starts from the station and that it does not create a cycle
+                    if (station in service.line.stations_ids[:-1] and
+                        last_service.service_arrival_time[station] < service.service_departure_time[station] and
+                        service not in path):
+                        new_path = path + [(station, service)]
+                        possible_paths.append(new_path)
+            
+        return filtered_services
+                    
     def filter_services_by_tsp(self, tsp_id: str) -> List[Service]:
         """
         Filters a List of Services by Train Service Provider ID.
