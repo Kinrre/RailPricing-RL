@@ -128,8 +128,8 @@ class Kernel:
                     utility = passenger.get_utility(
                         seat=int(seat.id),
                         tsp=int(service.tsp.id),
-                        service_departure_time=service.service_departure_time,
-                        service_arrival_time=service.service_arrival_time,
+                        service_departure_time=service.service_departure_time[origin],
+                        service_arrival_time=service.service_arrival_time[destination],
                         price=service.prices[(origin, destination)][seat],
                         departure_time_hard_restriction=departure_time_hard_restriction
                     )
@@ -162,8 +162,8 @@ class Kernel:
                 )
                 if ticket_bought:
                     passenger.service = service_arg_max.id
-                    passenger.service_departure_time = service_arg_max.service_departure_time
-                    passenger.service_arrival_time = service_arg_max.service_arrival_time
+                    passenger.service_departure_time = service_arg_max.service_departure_time[origin]
+                    passenger.service_arrival_time = service_arg_max.service_arrival_time[destination]
                     passenger.seat = seat_arg_max.name
                     passenger.ticket_price = ticket_price
                     passenger.utility = seat_utility

@@ -404,9 +404,9 @@ class Service:
         line (Line): Line in which the service is provided.
         tsp (TSP): Train Service Provider which provides the service.
         time_slot (TimeSlot): Time Slot. Defines the start time of the service.
-        schedule (List[Tuple[datetime.timedelta, datetime.timedelta]]): List of tuples with arrival-departure times.
-        service_departure_time (float): Service departure time in hours.
-        service_arrival_time (float): Service arrival time in hours.
+        schedule (Mapping[str, Tuple[datetime.timedelta, datetime.timedelta]]): Absolute schedule of the service per station.
+        service_departure_time (Mapping[str, float]): Service departure time in hours per station.
+        service_arrival_time (Mapping[str, float]): Service arrival time in hours per station.
         rolling_stock (RollingStock): Rolling Stock used in the service.
         capacity_constraints (Mapping[Tuple[str, str], Mapping[int, int]]): Constrained capacity (limit seats available
             between a specific pair of stations).
@@ -456,8 +456,8 @@ class Service:
         self.tsp = tsp
         self.time_slot = time_slot
         self.schedule = self._get_absolute_schedule()
-        self.service_departure_time = self.schedule[0][0].seconds / 3600  # Service departure time in hours
-        self.service_arrival_time = self.schedule[-1][0].seconds / 3600  # Service arrival time in hours
+        self.service_arrival_time = {station.id: self.schedule[station.id][0].seconds / 3600 for station in self.line.stations}
+        self.service_departure_time = {station.id: self.schedule[station.id][1].seconds / 3600 for station in self.line.stations}
         self.rolling_stock = rolling_stock
         self.capacity_constraints = capacity_constraints
         self.lift_constraints = self.date - datetime.timedelta(days=lift_constraints)
@@ -490,18 +490,18 @@ class Service:
                     tickets_sold_pair_hard_type[p][s.hard_type] += self.tickets_sold_pair_seats[p][s]
         return tickets_sold_pair_hard_type
 
-    def _get_absolute_schedule(self) -> List[Tuple[datetime.timedelta, datetime.timedelta]]:
+    def _get_absolute_schedule(self) -> Mapping[str, Tuple[datetime.timedelta, datetime.timedelta]]:
         """
-        Private method to get the absolute schedule of the service, using the relative schedule and the time slot start time.
+        Private method to get the absolute schedule of the service per station.
 
         Returns:
-            List[Tuple[datetime.timedelta, datetime.timedelta]]: Absolute schedule of the service.
+            Mapping[str, Tuple[datetime.timedelta, datetime.timedelta]]: Absolute schedule of the service per station.
         """
-        absolute_schedule = []
-        for dt, at in list(self.line.timetable.values()):
+        absolute_schedule = {}
+        for station, (dt, at) in self.line.timetable.items():
             abs_dt = datetime.timedelta(seconds=dt * 60) + self.time_slot.start
             abs_at = datetime.timedelta(seconds=at * 60) + self.time_slot.start
-            absolute_schedule.append((abs_dt, abs_at))
+            absolute_schedule[station] = (abs_dt, abs_at)
         return absolute_schedule
 
     @lru_cache(maxsize=None)
@@ -623,12 +623,13 @@ class Service:
             str: String representation of the service.
         """
         new_line = '\n\t\t'
+        line_times_absolute = {station: (format_td(at), format_td(dt)) for station, (at, dt) in self.schedule.items()}
         return (
             f'Service id: {self.id} \n'
             f'\tDate of service: {self.date} \n'
             f'\tStops: {[sta.id for sta in self.line.stations]} \n'
-            f'\tLine times (relative): {list(self.line.timetable.values())} \n'
-            f'\tLine times (absolute): {[(format_td(at), format_td(dt)) for at, dt in self.schedule]} \n'
+            f'\tLine times (relative): {self.line.timetable} \n'
+            f'\tLine times (absolute): {line_times_absolute} \n'
             f'\tTrain Service Provider: {self.tsp} \n'
             f'\tTime Slot: {self.time_slot} \n'
             f'\tRolling Stock: {self.rolling_stock} \n'
