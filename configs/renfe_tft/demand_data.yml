@@ -47,6 +47,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.4
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+    b_0: 0
+    b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+    b_0: 0
+    b_1: 1
   error: norm
   error_kwargs:
     loc: 2
@@ -89,6 +97,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.3
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+    b_0: 0
+    b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+    b_0: 0
+    b_1: 1
   error: norm
   error_kwargs:
     loc: 1
@@ -131,6 +147,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.3
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+    b_0: 0
+    b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+    b_0: 0
+    b_1: 1
   error: norm
   error_kwargs:
     loc: 1

@@ -28,6 +28,9 @@ userPattern:
     utility: 15
   - id: 3
     utility: 18
+  train_service_providers:
+    - id: 1
+      utility: 0
   penalty_arrival_time: polynomial
   penalty_arrival_time_kwargs:
     b_0: 0
@@ -44,6 +47,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.4
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+      b_0: 0
+      b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+      b_0: 0
+      b_1: 1
   error: norm
   error_kwargs:
     loc: 2
@@ -67,6 +78,9 @@ userPattern:
     utility: 12
   - id: 3
     utility: 15
+  train_service_providers:
+    - id: 1
+      utility: 0
   penalty_arrival_time: polynomial
   penalty_arrival_time_kwargs:
     b_0: 0
@@ -83,6 +97,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.3
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+      b_0: 0
+      b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+      b_0: 0
+      b_1: 1
   error: norm
   error_kwargs:
     loc: 1
@@ -106,6 +128,9 @@ userPattern:
     utility: 12
   - id: 3
     utility: 15
+  train_service_providers:
+    - id: 1
+      utility: 0
   penalty_arrival_time: polynomial
   penalty_arrival_time_kwargs:
     b_0: 0
@@ -122,6 +147,14 @@ userPattern:
   penalty_travel_time_kwargs:
     b_0: 0
     b_1: 0.3
+  penalty_transfer_time: polynomial
+  penalty_transfer_time_kwargs:
+      b_0: 0
+      b_1: 1
+  penalty_n_transfers: polynomial
+  penalty_n_transfers_kwargs:
+      b_0: 0
+      b_1: 1
   error: norm
   error_kwargs:
     loc: 1

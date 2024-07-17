@@ -3,6 +3,7 @@
 import datetime
 import yaml
 
+from robin.supply.constants import MAX_DEPTH
 from robin.supply.utils import get_time, get_date, format_td, set_stations_ids, convert_tree_to_dict
 
 from copy import deepcopy
@@ -407,8 +408,8 @@ class Service:
         tsp (TSP): Train Service Provider which provides the service.
         time_slot (TimeSlot): Time Slot. Defines the start time of the service.
         schedule (Mapping[str, Tuple[datetime.timedelta, datetime.timedelta]]): Absolute schedule of the service per station.
-        service_departure_time (Mapping[str, float]): Service departure time in hours per station.
-        service_arrival_time (Mapping[str, float]): Service arrival time in hours per station.
+        departure_time (Mapping[str, float]): Service departure time in hours per station.
+        arrival_time (Mapping[str, float]): Service arrival time in hours per station.
         rolling_stock (RollingStock): Rolling Stock used in the service.
         capacity_constraints (Mapping[Tuple[str, str], Mapping[int, int]]): Constrained capacity (limit seats available
             between a specific pair of stations).
@@ -458,8 +459,8 @@ class Service:
         self.tsp = tsp
         self.time_slot = time_slot
         self.schedule = self._get_absolute_schedule()
-        self.service_arrival_time = {station.id: self.schedule[station.id][0].seconds / 3600 for station in self.line.stations}
-        self.service_departure_time = {station.id: self.schedule[station.id][1].seconds / 3600 for station in self.line.stations}
+        self.arrival_time = {station.id: self.schedule[station.id][0].seconds / 3600 for station in self.line.stations}
+        self.departure_time = {station.id: self.schedule[station.id][1].seconds / 3600 for station in self.line.stations}
         self.rolling_stock = rolling_stock
         self.capacity_constraints = capacity_constraints
         self.lift_constraints = self.date - datetime.timedelta(days=lift_constraints)
@@ -644,6 +645,79 @@ class Service:
         )
 
 
+class Journey:
+    """
+    A sequence of services that form a journey.
+    
+    Attributes:
+        services (List[Service]): List of services that form the journey.
+        stations (List[str]): List of stations that form the journey.
+        markets (Dict[Service, Tuple[str, str]]): Dictionary of services and the origin-destination stations.
+        departure_time (float): Departure time of the journey in hours.
+        arrival_time (float): Arrival time of the journey in hours.
+        n_transfers (int): Number of transfers in the journey.
+    """
+    
+    def __init__(self, services: List[Service], stations: List[str]) -> None:
+        """
+        Initialize a Journey object.
+        
+        Args:
+            services (List[Service]): List of services that form the journey.
+            stations (List[str]): List of stations that form the journey.
+        """
+        self.services = services
+        self.stations = stations
+        self.markets = {service: (self.stations[i], self.stations[i + 1]) for i, service in enumerate(services)}
+        self.departure_time = self.services[0].departure_time[self.stations[0]]
+        self.arrival_time = self.services[-1].arrival_time[self.stations[-1]]
+        
+    @property
+    def n_transfers(self) -> int:
+        """
+        Get the number of transfers in the journey.
+        
+        Returns:
+            int: Number of transfers in the journey.
+        """
+        return len(self.services) - 1
+
+    @property
+    def transfer_time(self) -> float:
+        """
+        Get the total journey transfer time.
+
+        Returns:
+            transfer_time (float): Total journey transfer time.
+        """
+        transfer_time = 0
+        # Transfer stations are the stations between the origin and destination
+        transfer_stations = self.stations[1:-1]
+        # Check the services by pairs to calculate the transfer time
+        services = [(self.services[i], self.services[i + 1]) for i in range(len(self.services) - 1)]
+        for (origin, destination), station in zip(services, transfer_stations):
+            transfer_time += destination.departure_time[station] - origin.arrival_time[station]
+        return transfer_time
+
+    def __str__(self) -> str:
+        """
+        Returns a human readable string representation of the Journey object.
+        
+        Returns:
+            str: Human readable string representation of the Journey object.
+        """
+        return f'Journey from {self.stations[0]} to {self.stations[-1]} with {self.n_transfers} transfers'
+    
+    def __repr__(self) -> str:
+        """
+        Returns the debuggable string representation of the Journey object.
+        
+        Returns:
+            str: Debuggable string representation of the Journey object.
+        """
+        return f'Journey(services={self.services}, stations={self.stations})'
+
+
 class Supply:
     """
     List of Service's available in the system.
@@ -718,9 +792,9 @@ class Supply:
                 return service
 
     @lru_cache(maxsize=None)
-    def filter_services(self, origin: str, destination: str, date: datetime.date) -> List[Tuple[str, Service, str]]:
+    def filter_journeys(self, origin: str, destination: str, date: datetime.date, max_depth: int = MAX_DEPTH) -> List[Journey]:
         """
-        Filters a List of Services available in the system that meet the users requirements.
+        Filters a list of journeys available in the system that meet the users requirements.
 
         It uses a Breadth-First Search algorithm to find all the possible paths between the origin and destination
         stations. The algorithm starts at the origin station and explores all the possible paths until the destination
@@ -730,20 +804,24 @@ class Supply:
             origin (str): Origin Station ID.
             destination (str): Destination Station ID.
             date (datetime.date): Date of service (day, month, year, without time).
+            max_depth (int): Maximum depth of the search, that is, the maximum number of services in the journey.
 
         Returns:
-            filtered_services (List[Tuple[str, Service, str]]): List of tuples with origin, service and destination of
-                each service used.
+            journeys (Journey): List of Journey objects that meet the user requests.
         """
         # Get all the possible paths that start at the origin station, so, last station is dropped
         services = [service for service in self.services if service.date == date]
         possible_paths = [[(origin, service)] for service in services if origin in service.line.stations_ids[:-1]]
-        filtered_services = []
+        journeys = []
 
         while possible_paths:
             # Get the first path in the list with the last station and service
             path = possible_paths.pop(0)
             last_station, last_service = path[-1]
+            
+            # Check the depth of the current path
+            if len(path) > max_depth:
+                continue
             
             # Get the list of stations for the last service in the current path starting after the current station
             current_station_index = last_service.line.stations_ids.index(last_station)
@@ -751,10 +829,11 @@ class Supply:
 
             # Check if the destination is in the current path
             if destination in subsequent_stations:
-                # Reconstruction of the path to have the origin and destination stations of each service used
-                complete_path = path + [(destination, None)]
-                formatted_path = [(complete_path[i][0], complete_path[i][1], complete_path[i + 1][0]) for i in range(len(complete_path) - 1)]
-                filtered_services.append(formatted_path)
+                # Create a Journey object with the services and stations of the path
+                journey_services = [service for _, service in path]
+                journey_stations = [station for station, _ in path] + [destination]
+                journey = Journey(services=journey_services, stations=journey_stations)
+                journeys.append(journey)
                 continue
             
             # Extend the path with new services starting from any subsequent station
@@ -762,13 +841,13 @@ class Supply:
                 for service in services:
                     # Check that the new service starts from the station and that it does not create a cycle
                     if (station in service.line.stations_ids[:-1] and
-                        last_service.service_arrival_time[station] < service.service_departure_time[station] and
+                        last_service.arrival_time[station] < service.departure_time[station] and
                         service not in path):
                         new_path = path + [(station, service)]
                         possible_paths.append(new_path)
             
-        return filtered_services
-                    
+        return journeys
+
     def filter_services_by_tsp(self, tsp_id: str) -> List[Service]:
         """
         Filters a List of Services by Train Service Provider ID.

@@ -1,6 +1,7 @@
 """Exceptions for the demand module."""
 
 from robin.demand.functions import Function
+from robin.supply.entities import Journey
 
 
 class InvalidDistributionException(Exception):
@@ -46,4 +47,12 @@ class InvalidFunctionException(Exception):
         functions = [member for member in dir(Function) if member[0] != '_']
         msg = (f"The function '{function_name}' is not contained in the ROBIN module. "
                f'Available functions are: {functions}.')
+        super().__init__(msg, *args, **kwargs)
+
+
+class NoTicketsAvailableException(Exception):
+    """Raised when there are no tickets available for the given journey."""
+
+    def __init__(self, journey: Journey, *args, **kwargs):
+        msg = (f"There are no tickets available for the journey '{journey}'.")
         super().__init__(msg, *args, **kwargs)

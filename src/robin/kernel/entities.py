@@ -8,6 +8,8 @@ import random
 import os
 
 from robin.demand.entities import Demand, Passenger
+from robin.kernel.exceptions import TicketNotBoughtException
+from robin.supply.constants import MAX_DEPTH
 from robin.supply.entities import Service, Supply
 
 from pathlib import Path
@@ -81,8 +83,8 @@ class Kernel:
             self,
             passengers: List[Passenger],
             output_path: Union[Path, None] = None,
-            departure_time_hard_restriction: bool = True,
-            calculate_global_utility: bool = False
+            max_depth: int = MAX_DEPTH,
+            departure_time_hard_restriction: bool = True
         ) -> None:
         """
         Private method to simulate the demand-supply interaction.
@@ -90,89 +92,56 @@ class Kernel:
         Args:
             passengers (List[Passenger]): List of passengers.
             output_path (Path, optional): Path to the output csv file. Defaults to None.
+            max_depth (int, optional): Maximum depth for the journey search algorithm. Defaults to MAX_DEPTH.
             departure_time_hard_restriction (bool, optional): If True, the passenger will not
                 be assigned to a service with a departure time that is not valid. Defaults to True.
-            calculate_global_utility (bool, optional): If True, it will be calculated the global utility
-                for each seat, even if no tickets are available. Defaults to False.
         """
         for passenger in passengers:
             # Filter services by passenger's origin-destination and date
-            origin = passenger.market.departure_station
-            destination = passenger.market.arrival_station
-            services = self.supply.filter_services(
+            journeys = self.supply.filter_journeys(
                 origin=passenger.market.departure_station,
                 destination=passenger.market.arrival_station,
-                date=passenger.arrival_day.date
+                date=passenger.arrival_day.date,
+                max_depth=max_depth
             )
 
-            # Calculate utility for each service and seat
-            service_arg_max = None
-            seat_arg_max = None
-            seat_utility = 0
-            ticket_price = 0
-            service_arg_max_global = 0
-            seat_arg_max_global = 0
-            seat_utility_global = 0
+            # Calculate utility for each journey
+            journey_arg_max = {
+                'journey': None,
+                'seats': None,
+                'utility': 0,
+                'ticket_price': 0
+            }
 
-            for service in services:
-                for seat in service.prices[(origin, destination)].keys():
-                    # Check if seat is available
-                    purchase_day = passenger.purchase_day
-                    tickets_available = service.tickets_available(origin, destination, seat, purchase_day)
-                    
-                    # Skip service if no tickets are available and we are not calculating global utility
-                    if not calculate_global_utility and not tickets_available:
-                        continue
-
-                    # Calculate utility
-                    utility = passenger.get_utility(
-                        seat=int(seat.id),
-                        tsp=int(service.tsp.id),
-                        service_departure_time=service.service_departure_time[origin],
-                        service_arrival_time=service.service_arrival_time[destination],
-                        price=service.prices[(origin, destination)][seat],
-                        departure_time_hard_restriction=departure_time_hard_restriction
-                    )
-                    # Update global utility
-                    if utility > seat_utility_global:
-                        service_arg_max_global = service
-                        seat_arg_max_global = seat
-                        seat_utility_global = utility
-
-                    # Check if seat is available
-                    if not tickets_available:
-                        continue
-
-                    # Update service with max utility
-                    if utility > seat_utility:
-                        service_arg_max = service
-                        seat_arg_max = seat
-                        seat_utility = utility
-                        ticket_price = service.prices[(origin, destination)][seat]
-
-            # Buy ticket if utility is positive
-            if seat_utility > 0:
-                assert service_arg_max is not None
-                assert seat_arg_max is not None
-                ticket_bought = service_arg_max.buy_ticket(
-                    origin=passenger.market.departure_station,
-                    destination=passenger.market.arrival_station,
-                    seat=seat_arg_max,
-                    anticipation=passenger.purchase_day
+            for journey in journeys:
+                utility, seats = passenger.get_utility(
+                    journey=journey,
+                    departure_time_hard_restriction=departure_time_hard_restriction
                 )
-                if ticket_bought:
-                    passenger.service = service_arg_max.id
-                    passenger.service_departure_time = service_arg_max.service_departure_time[origin]
-                    passenger.service_arrival_time = service_arg_max.service_arrival_time[destination]
-                    passenger.seat = seat_arg_max.name
-                    passenger.ticket_price = ticket_price
-                    passenger.utility = seat_utility
 
-            # Even if passenger doesn't buy ticket, save best service found (if utility is positive)
-            if seat_utility_global > 0:
-                passenger.best_service = service_arg_max_global.id
-                passenger.best_seat = seat_arg_max_global.name
-                passenger.best_utility = seat_utility_global
+                # Update journey with max utility available
+                if utility > journey_arg_max['utility']:
+                    journey_arg_max['journey'] = journey
+                    journey_arg_max['seats'] = seats['seats']
+                    journey_arg_max['utility'] = utility
+                    journey_arg_max['ticket_price'] = sum(seats['price'])
+            
+            # Buy ticket if utility is positive
+            if journey_arg_max['utility'] > 0:
+                for i, service in enumerate(journey_arg_max['journey'].services):
+                    origin, destination = journey_arg_max['journey'].markets[service]
+                    ticket_bought = service.buy_ticket(
+                        origin=origin,
+                        destination=destination,
+                        seat=journey_arg_max['seats'][i],
+                        anticipation=passenger.purchase_day
+                    )
+                    if not ticket_bought:
+                        raise TicketNotBoughtException(service)
+                passenger.journey = journey_arg_max['journey']
+                passenger.seats = journey_arg_max['seats']
+                passenger.ticket_price = journey_arg_max['ticket_price']
+                passenger.utility = journey_arg_max['utility']
 
         # Save passengers data to csv file
         if output_path is not None:
@@ -189,10 +158,17 @@ class Kernel:
         column_names = [
             'id', 'user_pattern', 'departure_station', 'arrival_station',
             'arrival_day', 'arrival_time', 'purchase_day', 'service', 'service_departure_time',
-            'service_arrival_time', 'seat', 'price', 'utility', 'best_service', 'best_seat', 'best_utility'
+            'service_arrival_time', 'seat', 'price', 'utility'
         ]
         data = []
         for passenger in passengers:
+            details = {
+                'services': [service.id for service in passenger.journey.services] if passenger.journey else None,
+                'departure_time': passenger.journey.departure_time if passenger.journey else None,
+                'arrival_time': passenger.journey.arrival_time if passenger.journey else None,
+                'seats': [seat.name for seat in passenger.seats] if passenger.journey else None,
+                'utility': passenger.utility if passenger.journey else None
+            }
             data.append([
                 passenger.id,
                 passenger.user_pattern,
@@ -201,15 +177,12 @@ class Kernel:
                 passenger.arrival_day,
                 passenger.arrival_time,
                 passenger.purchase_day,
-                passenger.service,
-                passenger.service_departure_time,
-                passenger.service_arrival_time,
-                passenger.seat,
+                details['services'],
+                details['departure_time'],
+                details['arrival_time'],
+                details['seats'],
                 passenger.ticket_price,
-                passenger.utility,
-                passenger.best_service,
-                passenger.best_seat,
-                passenger.best_utility
+                details['utility']
             ])
         df = pd.DataFrame(data=data, columns=column_names)
         df.to_csv(output_path, index=False)
@@ -251,8 +224,8 @@ class Kernel:
     def simulate(
             self,
             output_path: Union[Path, None] = None,
-            departure_time_hard_restriction: bool = True,
-            calculate_global_utility: bool = False
+            max_depth: int = MAX_DEPTH,
+            departure_time_hard_restriction: bool = True
     ) -> List[Service]:
         """
         Simulate the demand-supply interaction.
@@ -262,10 +235,9 @@ class Kernel:
 
         Args:
             output_path (Path, optional): Path to the output csv file. Defaults to None.
+            max_depth (int, optional): Maximum depth for the journey search algorithm. Defaults to MAX_DEPTH.
             departure_time_hard_restriction (bool, optional): If True, the passenger will not
                 be assigned to a service with a departure time that is not valid. Defaults to True.
-            calculate_global_utility (bool, optional): If True, it will be calculated the global utility
-                for each seat, even if no tickets are available. Defaults to False.
 
         Returns:
             List[Service]: List of services with updated tickets.
@@ -273,8 +245,8 @@ class Kernel:
         self._simulate(
             passengers=self.passengers,
             output_path=output_path,
-            departure_time_hard_restriction=departure_time_hard_restriction,
-            calculate_global_utility=calculate_global_utility
+            max_depth=max_depth,
+            departure_time_hard_restriction=departure_time_hard_restriction
         )
         self._simulation_day_idx = len(self.simulation_days)
         return self.supply.services
@@ -282,8 +254,8 @@ class Kernel:
     def simulate_a_day(
             self,
             output_path: Union[Path, None] = None,
-            departure_time_hard_restriction: bool = True,
-            calculate_global_utility: bool = False
+            max_depth: int = MAX_DEPTH,
+            departure_time_hard_restriction: bool = True
     ) -> List[Service]:
         """
         Simulate the demand-supply interaction for a day.
@@ -296,8 +268,7 @@ class Kernel:
             output_path (Path, optional): Path to the output csv file. Defaults to None.
             departure_time_hard_restriction (bool, optional): If True, the passenger will not
                 be assigned to a service with a departure time that is not valid. Defaults to True.
-            calculate_global_utility (bool, optional): If True, it will be calculated the global utility
-                for each seat, even if no tickets are available. Defaults to False.
+            max_depth (int, optional): Maximum depth for the journey search algorithm. Defaults to MAX_DEPTH.
 
         Returns:
             List[Service]: List of services with updated tickets.
@@ -310,8 +281,8 @@ class Kernel:
         self._simulate(
             passengers=self.passengers_purchase_day[self.simulation_day],
             output_path=output_path,
-            departure_time_hard_restriction=departure_time_hard_restriction,
-            calculate_global_utility=calculate_global_utility
+            max_depth=max_depth,
+            departure_time_hard_restriction=departure_time_hard_restriction
         )
         # Update simulation day index
         self._simulation_day_idx += 1

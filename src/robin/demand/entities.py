@@ -5,8 +5,9 @@ import numpy as np
 import yaml
 
 from robin.demand.constants import DEFAULT_SEAT_UTILITY, DEFAULT_TSP_UTILITY, DEFAULT_RVS_SIZE
-from robin.demand.exceptions import InvalidForbiddenDepartureHoursException
+from robin.demand.exceptions import InvalidForbiddenDepartureHoursException, NoTicketsAvailableException
 from robin.demand.utils import get_function, get_scipy_distribution
+from robin.supply.entities import Journey, Seat
 
 from pathlib import Path
 from typing import Any, List, Mapping, Union, Tuple
@@ -28,8 +29,8 @@ class Market:
 
         Args:
             id (int): The market id.
-            departure_station (Station): The departure station id.
-            arrival_station (Station): The arrival station id.
+            departure_station (str): The departure station id.
+            arrival_station (str): The arrival station id.
         """
         self.id = id
         self.departure_station = departure_station
@@ -112,6 +113,10 @@ class UserPattern:
             penalty_cost_kwargs: Mapping[str, Union[int, float]],
             penalty_travel_time: str,
             penalty_travel_time_kwargs: Mapping[str, Union[int, float]],
+            penalty_transfer_time: str,
+            penalty_transfer_time_kwargs: Mapping[str, Union[int, float]],
+            penalty_n_transfers: str,
+            penalty_n_transfers_kwargs: Mapping[str, Union[int, float]],
             error: str,
             error_kwargs: Mapping[str, Union[int, float]],
             default_seat_utility: float = DEFAULT_SEAT_UTILITY,
@@ -177,6 +182,10 @@ class UserPattern:
         self.penalty_cost_kwargs = list(penalty_cost_kwargs.values())
         self._penalty_travel_time = get_function(function_name=penalty_travel_time)
         self.penalty_travel_time_kwargs = list(penalty_travel_time_kwargs.values())
+        self._penalty_transfer_time = get_function(function_name=penalty_transfer_time)
+        self.penalty_transfer_time_kwargs = list(penalty_transfer_time_kwargs.values())
+        self._penalty_n_transfers = get_function(function_name=penalty_n_transfers)
+        self.penalty_n_transfers_kwargs = list(penalty_n_transfers_kwargs.values())
         self._error, self.error_kwargs = get_scipy_distribution(
             distribution_name=error, is_discrete=False, **error_kwargs
         )
@@ -318,7 +327,31 @@ class UserPattern:
             float: The penalty function value for the travel time.
         """
         return self._penalty_travel_time(x=x, coeff=self.penalty_travel_time_kwargs)
+
+    def penalty_transfer_time(self, x: float) -> float:
+        """
+        Returns the value of the penalty function for the transfer time.
+
+        Args:
+            x (float): The transfer time.
+
+        Returns:
+            float: The penalty function value for the transfer time.
+        """
+        return self._penalty_transfer_time(x=x, coeff=self.penalty_transfer_time_kwargs)
     
+    def penalty_n_transfers(self, x: int) -> float:
+        """
+        Returns the value of the penalty function for the number of transfers.
+
+        Args:
+            x (int): The number of transfers.
+
+        Returns:
+            float: The penalty function value for the number of transfers.
+        """
+        return self._penalty_n_transfers(x=x, coeff=self.penalty_n_transfers_kwargs)
+
     @property
     def error(self) -> float:
         """
@@ -370,6 +403,8 @@ class UserPattern:
             f'penalty_cost_kwargs={self.penalty_cost_kwargs}, '
             f'penalty_travel_time={self._penalty_travel_time}, '
             f'penalty_travel_time_kwargs={self.penalty_travel_time_kwargs}, '
+            f'penalty_transfer_time={self._penalty_transfer_time}, '
+            f'penalty_transfer_time_kwargs={self.penalty_transfer_time_kwargs}, '
             f'error={self._error}, '
             f'error_kwargs={self.error_kwargs})'
         )
@@ -598,15 +633,10 @@ class Passenger:
         arrival_day (Day): The desired Day of arrival.
         arrival_time (float): The desired time of arrival.
         purchase_day (datetime.date): The day of purchase of the train ticket.
-        service (Service): The service that this passenger is assigned to.
-        service_departure_time (float): The departure time of the service.
-        service_arrival_time (float): The arrival time of the service.
-        seat (Seat): The seat that this passenger is assigned to.
-        seat_price (float): The price of the seat.
-        utility (float): The utility of the seat.
-        best_service (Service): The best service that fits the passenger needs.
-        best_seat (Seat): The best seat from the best service for the passenger.
-        best_utility (float): The utility of the best seat.
+        journey (Journey): The journey that this passenger is assigned to.
+        seats (np.array[Seat]): The seats of the journey.
+        ticket_price (float): The price of the tickets of the journey.
+        utility (float): The utility of the journey.
     """
     
     def __init__(
@@ -635,15 +665,10 @@ class Passenger:
         self.arrival_day = arrival_day
         self.arrival_time = arrival_time
         self.purchase_day = purchase_day
-        self.service = None
-        self.service_departure_time = None
-        self.service_arrival_time = None
-        self.seat = None
+        self.journey = None
+        self.seats = None
         self.ticket_price = None
-        self.utility = None
-        self.best_service = None
-        self.best_seat = None
-        self.best_utility = None
+        self.utility = 0
 
     def _is_valid_departure_time(self, service_departure_time: float) -> bool:
         """
@@ -660,6 +685,41 @@ class Passenger:
         is_valid_departure_time_later = service_departure_time <= forbidden_departure_hours[1]
         return not (is_valid_departure_time_early and is_valid_departure_time_later)
 
+    def _get_utility_seat(self, seats_utility: np.ndarray[float]) -> float:
+        """
+        Returns the utility of the seats of the journey.
+
+        NOTE: A simple mean is used to calculate the utility of the seats.
+        In the future it can be used a weighted mean based on the travel time of each seat.
+        
+        Args:
+            seats_utility (np.ndarray[float]): The utility of the seats of the journey.
+
+        Returns:
+            utility_seats (float): The utility of the seats of the journey.
+        """
+        # NOTE: np.mean is much slower than sum / n_services
+        return sum(seats_utility) / len(seats_utility)
+
+    def _get_utility_tsp(self, journey: Journey) -> float:
+        """
+        Returns the utility of the train service provider of a journey.
+
+        NOTE: A simple mean is used to calculate the utility of the seats.
+        In the future it can be used a weighted mean based on the travel time of each seat.
+
+        Args:
+            journey (Journey): A journey that the passengers may be assigned to.
+
+        Returns:
+            float: The utility of the train service provider of the journey.
+        """
+        n_services = len(journey.services)
+        tsp_utility = np.zeros(n_services, dtype=float)
+        for i, service in enumerate(journey.services):
+            tsp_utility[i] = self.user_pattern.get_tsp_utility(int(service.tsp.id))
+        return sum(tsp_utility) / n_services
+
     def _get_utility_arrival_time(self, service_arrival_time: float) -> float:
         """
         Returns the utility of the passenger given the arrival time.
@@ -673,9 +733,8 @@ class Passenger:
         # NOTE: Speed up the arrival time utility by avoiding using max function.
         # earlier_displacement = max(self.arrival_time - service_arrival_time, 0)
         # later_displacement = max(service_arrival_time - self.arrival_time, 0)
-        earlier_displacement = self.arrival_time - service_arrival_time if self.arrival_time > service_arrival_time else 0
-        later_displacement = service_arrival_time - self.arrival_time if self.arrival_time < service_arrival_time else 0
-        return self.user_pattern.penalty_arrival_time(earlier_displacement + later_displacement)
+        displacement = abs(service_arrival_time - self.arrival_time)
+        return self.user_pattern.penalty_arrival_time(displacement)
 
     def _get_utility_departure_time(self, service_departure_time: float) -> float:
         """
@@ -695,16 +754,17 @@ class Passenger:
         departure_time = _departure_time if _departure_time < dt_end - dt_begin else dt_end - dt_begin
         return self.user_pattern.penalty_departure_time(departure_time)
 
-    def _get_utility_price(self, price: float) -> float:
+    def _get_utility_price(self, seats_price: np.ndarray[float]) -> float:
         """
-        Returns the utility of the passenger given the price.
+        Returns the utility of the passenger given the prices of the seats.
 
         Args:
-            price (float): The price of the service.
+            seats_price (np.ndarray[float]): The prices of the seats of the journey.
 
         Returns:
-            float: The utility of the passenger given the price.
+            float: The utility of the passenger given the prices of the seats.
         """
+        price = sum(seats_price)
         return self.user_pattern.penalty_cost(price)
 
     def _get_utility_travel_time(self, service_arrival_time: float, service_departure_time: float) -> float:
@@ -720,40 +780,117 @@ class Passenger:
         """
         return self.user_pattern.penalty_travel_time(service_arrival_time - service_departure_time)
 
-    def get_utility(
-            self,
-            seat: int,
-            tsp: int,
-            service_departure_time: float,
-            service_arrival_time: float,
-            price: float,
-            departure_time_hard_restriction: bool = False
-        ) -> float:
+    def _get_utility_transfer_time(self, transfer_time: float) -> float:
         """
-        Returns the utility of the passenger given the seat, the arrival time, the departure time and the price.
+        Returns the utility of the passenger given the transfer time.
 
         Args:
-            seat (int): The seat of the service.
-            tsp (int): The train service provider of the service.
-            service_departure_time (float): The departure time of the service.
-            service_arrival_time (float): The arrival time of the service.
-            price (float): The price of the seat.
+            transfer_time (float): The transfer time of the journey.
+
+        Returns:
+            float: The utility of the passenger given the transfer time.
+        """
+        return self.user_pattern.penalty_transfer_time(transfer_time)
+    
+    def _get_utility_n_transfers(self, n_transfers: int) -> float:
+        """
+        Returns the utility of the passenger given the number of transfers.
+
+        Args:
+            n_transfers (int): The number of transfers of the journey.
+
+        Returns:
+            float: The utility of the passenger given the number of transfers.
+        """
+        return self.user_pattern.penalty_n_transfers(n_transfers)
+
+    def get_seats(
+            self,
+            journey: Journey
+        ) -> Mapping[str, np.ndarray[float]]:
+        """
+        Returns the seats of the given journey that maximize the utility of the passenger.
+
+        Args:
+            journey (Journey): The journey that the passenger is assigned to.
+        
+        Raises:
+            NoTicketsAvailableException: Raised when there are no tickets available for the journey.    
+        
+        Returns:
+            seats (Mapping[str, np.ndarray[float]]): The seats of the journey with the utility and price.
+        """
+        n_services = len(journey.services)
+        seats = {
+            'seats': np.empty(n_services, dtype=object),
+            'utility': np.zeros(n_services, dtype=float),
+            'price': np.zeros(n_services, dtype=float)
+        }
+        seats['utility'].fill(-np.inf)
+
+        for i, service in enumerate(journey.services):
+            origin, destination = journey.markets[service]
+            valid_journey = False
+
+            for seat in service.prices[(origin, destination)].keys():
+                # Skip service if no tickets are available
+                tickets_available = service.tickets_available(origin, destination, seat, self.purchase_day)
+                if not tickets_available:
+                    continue
+
+                # Calculate seat utility with the error
+                valid_journey = True
+                seat_utility = self.user_pattern.get_seat_utility(int(seat.id)) + self.user_pattern.error
+
+                # Update seat with max utility available
+                if seat_utility > seats['utility'][i]:
+                    seats['seats'][i] = seat
+                    seats['utility'][i] = seat_utility
+                    seats['price'][i] = service.prices[(origin, destination)][seat]
+
+            # Stop calculating the utility of the seats if there are no tickets available
+            if not valid_journey:
+                raise NoTicketsAvailableException(journey)
+
+        return seats
+
+    def get_utility(
+            self,
+            journey: Journey,
+            departure_time_hard_restriction: bool = False
+        ) -> Tuple[np.ndarray[Seat], Mapping[str, np.ndarray[float]]]:
+        """
+        Returns the utility of the passenger given a journey.
+        
+        NOTE: It does not support calculating the utility of the passenger given a journey with best utility even
+        if there are not tickets available for a specific seat. In that case, it has to be calculated the complete
+        utility and it is not possible to shorten the calculation by doucoupling the utility of the seats with the
+        utility related to the journey such as the arrival and departure time, transfer time, travel time, etc.
+
+        Args:
+            journey (Journey): A journey that the passengers may be assigned to.
             departure_time_hard_restriction (bool, optional): If True, the passenger will not be
                 assigned to a service with a departure time that is not valid. Defaults to False.
         
         Returns:
-            float: The utility of the passenger given the seat, the arrival time, the departure time and the price.
+            utility (float): The utility of the passenger given a journey.
+            seats (Mapping[str, np.ndarray[float]]): The seats of the journey with the utility and price.
         """
-        if departure_time_hard_restriction and not self._is_valid_departure_time(service_departure_time):
-            return -np.inf # Minimum utility
-        seat_utility = self.user_pattern.get_seat_utility(seat)
-        tsp_utility = self.user_pattern.get_tsp_utility(tsp)
-        arrival_time_utility = self._get_utility_arrival_time(service_arrival_time)
-        departure_time_utility = self._get_utility_departure_time(service_departure_time)
-        price_utility = self._get_utility_price(price)
-        travel_time_utility = self._get_utility_travel_time(service_arrival_time, service_departure_time)
-        error_utility = self.user_pattern.error
-        return seat_utility + tsp_utility - arrival_time_utility - departure_time_utility - price_utility - travel_time_utility + error_utility
+        if departure_time_hard_restriction and not self._is_valid_departure_time(journey.departure_time):
+            return -np.inf, None
+        try:
+            seats = self.get_seats(journey)
+        except NoTicketsAvailableException:
+            return -np.inf, None
+        utility = self._get_utility_seat(seats['utility'])
+        utility += self._get_utility_tsp(journey)
+        utility -= self._get_utility_arrival_time(journey.arrival_time)
+        utility -= self._get_utility_departure_time(journey.departure_time)
+        utility -= self._get_utility_price(seats['price'])
+        utility -= self._get_utility_travel_time(journey.arrival_time, journey.departure_time)
+        utility -= self._get_utility_transfer_time(journey.transfer_time)
+        utility -= self._get_utility_n_transfers(journey.n_transfers)
+        return utility, seats
 
     def __str__(self) -> str:
         """
@@ -784,12 +921,10 @@ class Passenger:
             f'arrival_day={self.arrival_day}, '
             f'arrival_time={self.arrival_time}, '
             f'purchase_day={self.purchase_day}, '
-            f'service={self.service}, '
-            f'service_departure_time={self.service_departure_time}, '
-            f'service_arrival_time={self.service_arrival_time}, '
-            f'seat={self.seat}, '
+            f'journey={self.journey}, '
+            f'seats={self.seats}, '
             f'ticket_price={self.ticket_price}, '
-            f'utility={self.utility}'
+            f'utility={self.utility})'
         )
 
 
@@ -876,7 +1011,7 @@ class Demand:
             data: Mapping[str, Any],
             markets: Mapping[int, Market],
             user_patterns: Mapping[int, UserPattern]
-    ) -> Mapping[int, DemandPattern]:
+        ) -> Mapping[int, DemandPattern]:
         """
         Returns the demand patterns.
 
@@ -921,7 +1056,7 @@ class Demand:
             cls,
             data: Mapping[str, Any],
             demand_patterns: Mapping[int, DemandPattern]
-    ) -> Mapping[int, Day]:
+        ) -> Mapping[int, Day]:
         """
         Returns the days.
 

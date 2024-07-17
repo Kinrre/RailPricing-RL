@@ -1,0 +1,286 @@
+stations:
+- id: 'A'
+  name: Station_A
+  city: Station_A
+  short_name: Station_A
+  coordinates:
+    latitude: 40.406442
+    longitude: -3.690886
+- id: 'B'
+  name: Station_B
+  city: Station_B
+  short_name: Station_B
+  coordinates:
+    latitude: 40.406442
+    longitude: -3.690886
+- id: 'C'
+  name: Station_C
+  city: Station_C
+  short_name: Station_C
+  coordinates:
+    latitude: 40.406442
+    longitude: -3.690886
+- id: 'D'
+  name: Station_D
+  city: Station_D
+  short_name: Station_D
+  coordinates:
+    latitude: 40.406442
+    longitude: -3.690886
+
+seat:
+- id: '1'
+  name: Basic
+  hard_type: 1
+  soft_type: 1
+- id: '2'
+  name: Premium
+  hard_type: 2
+  soft_type: 1
+
+corridor:
+- id: '1'
+  name: Station_1 - Station_4
+  stations:
+  - org: 'A'
+    des:
+    - org: 'B'
+      des:
+      - org: 'C'
+        des:
+        - org: 'D'
+          des: []
+    - org: 'C'
+      des: []
+
+line:
+- id: '1'
+  name: Line A - C
+  corridor: '1'
+  stops:
+  - station: 'A'
+    arrival_time: 0
+    departure_time: 0
+  - station: 'C'
+    arrival_time: 45
+    departure_time: 45
+- id: '2'
+  name: Line A - B
+  corridor: '1'
+  stops:
+  - station: 'A'
+    arrival_time: 0
+    departure_time: 0
+  - station: 'B'
+    arrival_time: 30
+    departure_time: 30
+- id: '3'
+  name: Line A - B - C
+  corridor: '1'
+  stops:
+  - station: 'A'
+    arrival_time: 0
+    departure_time: 0
+  - station: 'B'
+    arrival_time: 30
+    departure_time: 30
+  - station: 'C'
+    arrival_time: 35
+    departure_time: 35
+- id: '4'
+  name: Line B - D
+  corridor: '1'
+  stops:
+  - station: 'B'
+    arrival_time: 0
+    departure_time: 0
+  - station: 'D'
+    arrival_time: 10
+    departure_time: 10
+- id: '5'
+  name: Line D - C
+  corridor: '1'
+  stops:
+  - station: 'D'
+    arrival_time: 0
+    departure_time: 0
+  - station: 'C'
+    arrival_time: 15
+    departure_time: 15
+
+rollingStock:
+- id: 1
+  name: S-114
+  seats:
+  - hard_type: 1
+    quantity: 250
+  - hard_type: 2
+    quantity: 50
+
+trainServiceProvider:
+- id: '1'
+  name: Renfe
+  rolling_stock:
+  - '1'
+- id: '2'
+  name: Ouigo
+  rolling_stock:
+  - '1'
+- id: '3'
+  name: Iryo
+  rolling_stock:
+  - '1'
+
+timeSlot:
+- id: '45010'
+  start: '7:30:00'
+  end: '7:40:00'
+- id: '108010'
+  start: '18:00:00'
+  end: '18:10:00'
+- id: '51010'
+  start: '8:30:00'
+  end: '8:40:00'
+- id: '57010'
+  start: '9:30:00'
+  end: '9:40:00'
+- id: '99010'
+  start: '16:30:00'
+  end: '16:40:00'
+- id: '117010'
+  start: '19:30:00'
+  end: '19:40:00'
+- id: '48010'
+  start: '8:00:00'
+  end: '8:10:00'
+- id: '54010'
+  start: '9:00:00'
+  end: '9:10:00'
+- id: '124010'
+  start: '20:40:00'
+  end: '20:50:00'
+- id: '42010'
+  start: '7:00:00'
+  end: '7:10:00'
+- id: '111010'
+  start: '18:30:00'
+  end: '18:40:00'
+- id: '39010'
+  start: '6:30:00'
+  end: '6:40:00'
+- id: '87010'
+  start: '14:30:00'
+  end: '14:40:00'
+- id: '37510'
+  start: '6:15:00'
+  end: '6:25:00'
+- id: '75010'
+  start: '12:30:00'
+  end: '12:40:00'
+- id: '93010'
+  start: '15:30:00'
+  end: '15:40:00'
+- id: '114010'
+  start: '19:00:00'
+  end: '19:10:00'
+- id: '127010'
+  start: '21:10:00'
+  end: '21:20:00'
+- id: '78010'
+  start: '13:00:00'
+  end: '13:10:00'
+- id: '105010'
+  start: '17:30:00'
+  end: '17:40:00'
+- id: '63010'
+  start: '10:30:00'
+  end: '10:40:00'
+- id: '102010'
+  start: '17:00:00'
+  end: '17:10:00'
+- id: '69010'
+  start: '11:30:00'
+  end: '11:40:00'
+- id: '96010'
+  start: '16:00:00'
+  end: '16:10:00'
+- id: '90010'
+  start: '15:00:00'
+  end: '15:10:00'
+
+service:
+- id: 1_06-09-2023-06.15
+  date: '2023-09-06'
+  line: '1'
+  train_service_provider: '1'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: 'A'
+    destination: 'C'
+    seats:
+    - seat: '1'
+      price: 70.0
+  capacity_constraints: null
+- id: 2_06-09-2023-06.15
+  date: '2023-09-06'
+  line: '2'
+  train_service_provider: '2'
+  time_slot: '37510'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: 'A'
+    destination: 'B'
+    seats:
+    - seat: '1'
+      price: 10.0
+  capacity_constraints: null
+- id: 3_06-09-2023-07.30
+  date: '2023-09-06'
+  line: '3'
+  train_service_provider: '3'
+  time_slot: '45010'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: 'A'
+    destination: 'B'
+    seats:
+    - seat: '1'
+      price: 15.0
+  - origin: 'B'
+    destination: 'C'
+    seats:
+    - seat: '1'
+      price: 25.0
+  - origin: 'A'
+    destination: 'C'
+    seats:
+    - seat: '1'
+      price: 50.0
+  capacity_constraints: null
+- id: 4_06-09-2023-08.00
+  date: '2023-09-06'
+  line: '4'
+  train_service_provider: '1'
+  time_slot: '48010'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: 'B'
+    destination: 'D'
+    seats:
+    - seat: '1'
+      price: 20.0
+  capacity_constraints: null
+- id: 5_06-09-2023-08.30
+  date: '2023-09-06'
+  line: '5'
+  train_service_provider: '2'
+  time_slot: '51010'
+  rolling_stock: '1'
+  origin_destination_tuples:
+  - origin: 'D'
+    destination: 'C'
+    seats:
+    - seat: '1'
+      price: 15.0
+  capacity_constraints: null
