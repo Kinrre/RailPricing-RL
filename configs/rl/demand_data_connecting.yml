@@ -2,6 +2,9 @@ market:
   - id: 1
     departure_station: 'A'
     arrival_station: 'C'
+  - id: 2
+    departure_station: 'A'
+    arrival_station: 'D'
 
 userPattern:
   - id: 1
@@ -46,7 +49,7 @@ userPattern:
     penalty_transfer_time: polynomial
     penalty_transfer_time_kwargs:
       b_0: 0
-      b_1: 0.2
+      b_1: 0.5
     penalty_n_transfers: polynomial
     penalty_n_transfers_kwargs:
       b_0: 0
@@ -116,6 +119,16 @@ demandPattern:
         potential_demand_kwargs:
           low: 60
           high: 101
+        user_pattern_distribution:
+          - id: 1
+            percentage: 1.0
+          - id: 2
+            percentage: 0.0
+      - market: 2
+        potential_demand: randint
+        potential_demand_kwargs:
+          low: 20
+          high: 41
         user_pattern_distribution:
           - id: 1
             percentage: 1.0

@@ -205,7 +205,11 @@ class RobinEnv(ABC, Env):
         Returns:
             dict: Info of the environment.
         """
-        return {}
+        info = {
+            'profit': [service.total_profit for service in self.kernel.supply.services],
+            'prices': [service.prices for service in self.kernel.supply.services]
+        }
+        return info
 
     @abstractmethod
     def _get_reward(self) -> float:
