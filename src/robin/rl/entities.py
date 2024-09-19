@@ -5,7 +5,7 @@ import torch
 
 from robin.kernel.entities import Kernel
 from robin.supply.entities import Supply
-from robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, LOW_PRICE, HIGH_PRICE
+from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -264,8 +264,8 @@ class RobinEnv(ABC, Env):
         for service, action_service in zip(supply.services, action):
             for ((origin, destination), seats), price in zip(service.prices.items(), action_service['prices']):
                 for seat_type, seat_price in zip(seats, price['seats']):
-                    price_modification = seat_price['price'] * self.action_factor
-                    service.prices[(origin, destination)][seat_type] += price_modification
+                    price_modification = seat_price['price'] * (self.action_factor / 100)
+                    service.prices[(origin, destination)][seat_type] *= (1 + price_modification)
                     # Clip the price to its range, so, it is not possible to have negative prices
                     service.prices[(origin, destination)][seat_type] = \
                         np.clip(service.prices[(origin, destination)][seat_type], LOW_PRICE, HIGH_PRICE)
@@ -373,7 +373,7 @@ class RobinEnv(ABC, Env):
                     spaces.Dict({
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'price': spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float32)
+                                'price': spaces.Discrete(n=NUMBER_ACTIONS, start=START_ACTION)
                             }) for _ in seats
                         ])
                     }) for _, seats in service.prices.items()
