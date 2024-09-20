@@ -205,9 +205,23 @@ class RobinEnv(ABC, Env):
         Returns:
             dict: Info of the environment.
         """
+        profit = [service.total_profit for service in self.kernel.supply.services]
+        total_passengers = len(self.kernel.passengers)
+        traveling_passengers = len([passenger for passenger in self.kernel.passengers if passenger.journey])
         info = {
-            'profit': [service.total_profit for service in self.kernel.supply.services],
-            'prices': [service.prices for service in self.kernel.supply.services]
+            'services': {
+                'total_profit': sum(profit),
+                'profit': profit,
+                'prices': {service.id: service.prices for service in self.kernel.supply.services},
+                'tickets_sold': {service.id: service.tickets_sold_pair_seats for service in self.kernel.supply.services},
+            },
+            'passengers': {
+                'total': total_passengers,
+                'travelling': traveling_passengers,
+                'not_travelling': total_passengers - traveling_passengers,
+                'percentage_travelling': traveling_passengers / total_passengers * 100,
+                'utility': np.mean([passenger.utility for passenger in self.kernel.passengers])
+            }
         }
         return info
 
