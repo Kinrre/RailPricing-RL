@@ -5,7 +5,7 @@ import torch
 
 from robin.kernel.entities import Kernel
 from robin.supply.entities import Supply
-from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE
+from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -60,16 +60,53 @@ class FlattenMultiObservation(ObservationWrapper):
         return [flatten(space, obs) for space, obs in zip(self.env.observation_space, observation)]
 
 
+class HeterogeneousRunningMeanStd(RunningMeanStd):
+    """
+    Calculate the running mean and std of a data stream.
+    
+    NOTE: This class supports heterogeneous data types.
+    """
+    
+    def norm(self, data_array: float | np.ndarray) -> float | np.ndarray:
+        """
+        Normalize the data array.
+        
+        Args:
+            data_array (float | np.ndarray): Data array to normalize.
+        
+        Returns:
+            float | np.ndarray: Normalized data array.
+        """
+        var = np.array([np.sqrt(var + self.eps) for var in self.var], dtype=object)
+        data_array = (data_array - self.mean) / var
+        if self.clip_max:
+            data_array = np.reshape(
+                np.array(
+                    [np.clip(agent, -self.clip_max, self.clip_max) for data in data_array for agent in data],
+                    dtype=object,
+                ), data_array.shape
+            )
+        return data_array
+    
+
 class VectorEnvNormObsReward(VectorEnvNormObs):
     """
     Vector environment with normalized observations and rewards.
 
     Attributes:
+        obs_rms (RunningMeanStd): Running mean/std for the observations.
         reward_rms (RunningMeanStd): Running mean/std for the rewards.
         update_reward_rms (bool): Whether to update the reward running mean/std.
     """
 
-    def __init__(self, venv: BaseVectorEnv, update_obs_rms: bool = True, update_reward_rms: bool = True) -> None:
+    def __init__(
+        self,
+        venv: BaseVectorEnv,
+        update_obs_rms: bool = True,
+        update_reward_rms: bool = True,
+        clip_max: float = CLIP_MAX,
+        is_heterogeneous: bool = False
+    ) -> None:
         """
         Initialize the vector environment with normalized observations and rewards.
 
@@ -77,10 +114,15 @@ class VectorEnvNormObsReward(VectorEnvNormObs):
             venv (BaseVectorEnv): Vector environment.
             update_obs_rms (bool): Whether to update the observation running mean/std.
             update_reward_rms (bool): Whether to update the reward running mean/std.
+            clip_max (float): Maximum absolute value for the data array.
+            is_heterogeneous (bool): Whether the data array is heterogeneous.
         """
         super().__init__(venv, update_obs_rms)
+        self.obs_rms = HeterogeneousRunningMeanStd(clip_max=clip_max) if is_heterogeneous \
+            else RunningMeanStd(clip_max=clip_max)
         self.update_reward_rms = update_reward_rms
-        self.reward_rms = RunningMeanStd()
+        self.reward_rms = HeterogeneousRunningMeanStd(clip_max=clip_max) if is_heterogeneous \
+            else RunningMeanStd(clip_max=clip_max)
 
     def step(
         self,
