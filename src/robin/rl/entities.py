@@ -5,7 +5,7 @@ import torch
 
 from robin.kernel.entities import Kernel
 from robin.supply.entities import Supply
-from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX
+from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX, LOG_DIR
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -16,7 +16,8 @@ from gymnasium.spaces.utils import flatten_space, flatten, unflatten
 from gymnasium.wrappers import FlattenObservation
 from numpy.typing import NDArray
 from pathlib import Path
-from tianshou.env import VectorEnvNormObs
+from torch.utils.tensorboard import SummaryWriter
+from tianshou.env import SubprocVectorEnv, VectorEnvNormObs
 from tianshou.env.venvs import BaseVectorEnv
 from tianshou.utils import RunningMeanStd
 from tianshou.env.utils import gym_new_venv_step_type
@@ -149,6 +150,160 @@ class VectorEnvNormObsReward(VectorEnvNormObs):
     def get_reward_rms(self) -> RunningMeanStd:
         """Return reward running mean/std."""
         return self.reward_rms
+
+
+class Stats:
+    """
+    Stats class to log data from the environment using a SummaryWriter.
+    
+    Attributes:
+        logger (SummaryWriter): A TensorboardX SummaryWriter instance for logging.
+    """
+    
+    def __init__(self, log_dir: str = LOG_DIR) -> None:
+        """
+        Initializes the Stats object to log data using SummaryWriter.
+        
+        Args:
+            log_dir (str): The directory to save the logs.
+        """
+        self.logger = SummaryWriter(log_dir)
+
+    def log_services_to_tensorboard(self, stats: list[dict], ep_i: int):
+        """
+        Logs the services data to Tensorboard for a specific episode.
+        
+        Args:
+            stats (list[dict]): List of dictionaries containing stats at the end of an episode.
+            ep_i (int): The episode index.
+        """
+        # Log mean total profit
+        mean_total_profit = np.mean([info['services']['total_profit'] for info in stats])
+        self.logger.add_scalar('services/mean_total_profit', mean_total_profit, ep_i)
+
+        # Log mean prices and tickets sold for each service, market, and seat
+        mean_prices = self._calculate_mean_service([info['services']['prices'] for info in stats])
+        self._log_service_metric_to_tensorboard(mean_prices, 'mean_last_prices', ep_i)
+        mean_tickets_sold = self._calculate_mean_service([info['services']['tickets_sold'] for info in stats])
+        self._log_service_metric_to_tensorboard(mean_tickets_sold, 'mean_tickets_sold', ep_i)
+        
+    def log_passengers_to_tensorboard(self, stats: list[dict], ep_i: int):
+        """
+        Logs the passengers data to Tensorboard for a specific episode.
+        
+        Args:
+            stats (list[dict]): List of dictionaries containing stats at the end of an episode.
+            ep_i (int): The episode index.
+        """
+        # Log mean total passengers
+        mean_total_passengers = np.mean([info['passengers']['total'] for info in stats])
+        self.logger.add_scalar('passengers/mean_total_passengers', mean_total_passengers, ep_i)
+        
+        # Log mean total passengers travelling
+        mean_passengers_travelling = np.mean([info['passengers']['travelling'] for info in stats])
+        self.logger.add_scalar('passengers/mean_passengers_travelling', mean_passengers_travelling, ep_i)
+        
+        # Log mean total passengers not travelling
+        mean_passengers_not_travelling = np.mean([info['passengers']['not_travelling'] for info in stats])
+        self.logger.add_scalar('passengers/mean_passengers_not_travelling', mean_passengers_not_travelling, ep_i)
+        
+        # Log mean total percentage of passengers travelling
+        mean_percentage_travelling = np.mean([info['passengers']['percentage_travelling'] for info in stats])
+        self.logger.add_scalar('passengers/mean_percentage_travelling', mean_percentage_travelling, ep_i)
+        
+        # Log mean utility
+        mean_utility = np.mean([info['passengers']['utility'] for info in stats])
+        self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)    
+
+    def to_tensorboard(self, stats: list[dict], ep_i: int):
+        """
+        Logs the stats to Tensorboard for a specific episode.
+        
+        Args:
+            stats (list[dict]): List of dictionaries containing stats at the end of an episode.
+            ep_i (int): The episode index.
+        """
+        self.log_services_to_tensorboard(stats, ep_i)
+        self.log_passengers_to_tensorboard(stats, ep_i)
+
+    def _calculate_mean_service(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
+        """
+        Calculates the mean service metric for each service.
+        
+        Args:
+            service_metric_list (list[dict[str, dict[str, dict[str, float]]]): List of dictionaries containing the
+                service metric for each service, market and seat.
+        """
+        aggregated_metric = {}
+
+        # Aggregate metric for each service, market, and seat
+        for env in service_metric_list:
+            for service, markets in env.items():
+                if service not in aggregated_metric:
+                    aggregated_metric[service] = {}
+                for market, seats in markets.items():
+                    if market not in aggregated_metric[service]:
+                        aggregated_metric[service][market] = {}
+                    for seat, value in seats.items():
+                        if seat.name not in aggregated_metric[service][market]:
+                            aggregated_metric[service][market][seat.name] = []
+                        aggregated_metric[service][market][seat.name].append(value)
+
+        # Calculate the mean for each seat
+        for service, markets in aggregated_metric.items():
+            for market, seats in markets.items():
+                for seat, values in seats.items():
+                    aggregated_metric[service][market][seat] = np.mean(values)
+
+        return aggregated_metric
+    
+    def _log_service_metric_to_tensorboard(self, metric: dict[str, dict[str, dict[str, float]]], metric_name: str, ep_i: int):
+        """
+        Logs the calculated mean tickets sold for each service, market, and seat to Tensorboard.
+        
+        Args:
+            metric (dict[str, dict[str, dict[str, float]]]): Dictionary containing the calculated mean metric for each service, market, and seat.
+            metric_name (str): The name of the metric to log.
+            ep_i (int): The episode index.
+        """
+        for service, markets in metric.items():
+            for market, seats in markets.items():
+                for seat, value in seats.items():
+                    market = '_'.join(market)
+                    self.logger.add_scalar(f'services/{metric_name}/{service}/{market}/{seat}', value, ep_i)
+
+
+class StatsSubprocVectorEnv(SubprocVectorEnv):
+    """
+    Subprocess vectorized environment with stats logging.
+    """
+    
+    def __init__(self, log_dir: str = LOG_DIR, *args, **kwargs) -> None:
+        """
+        Initializes the StatsSubprocVectorEnv object with stats logging.
+        
+        Args:
+            log_dir (str): The directory to save the logs.
+        """
+        super().__init__(*args, **kwargs)
+        self.stats = Stats(log_dir)
+        self.episode_index = 0
+    
+    def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
+        """
+        Perform an action in the environment and log the stats.
+
+        Args:
+            action (list): Action to perform.
+        
+        Returns:
+            Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
+        """
+        obs, reward, terminated, truncated, info = super().step(action, *args, **kwargs)
+        if terminated.all():
+            self.stats.to_tensorboard(info, self.episode_index)
+            self.episode_index += 1
+        return obs, reward, terminated, truncated, info
 
 
 class RobinEnv(ABC, Env):
@@ -672,8 +827,8 @@ class RobinEnvFactory:
             path_config_demand (Path): Path to the demand configuration file.
             multi_agent (bool): Whether to create a multi-agent environment.
             departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
-            seed (int, None): Seed for the random number generator.
             action_factor (int): Factor to multiply the price action.
+            seed (int, None): Seed for the random number generator.
         
         Returns:
             RobinEnv: Robin environment.

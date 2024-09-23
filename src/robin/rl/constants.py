@@ -8,3 +8,5 @@ LOW_PRICE = 0
 HIGH_PRICE = np.inf
 
 CLIP_MAX = 10.0
+
+LOG_DIR = 'models'
