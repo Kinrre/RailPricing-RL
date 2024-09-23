@@ -245,9 +245,9 @@ class Stats:
                     if market not in aggregated_metric[service]:
                         aggregated_metric[service][market] = {}
                     for seat, value in seats.items():
-                        if seat.name not in aggregated_metric[service][market]:
-                            aggregated_metric[service][market][seat.name] = []
-                        aggregated_metric[service][market][seat.name].append(value)
+                        if seat not in aggregated_metric[service][market]:
+                            aggregated_metric[service][market][seat] = []
+                        aggregated_metric[service][market][seat].append(value)
 
         # Calculate the mean for each seat
         for service, markets in aggregated_metric.items():
@@ -269,7 +269,6 @@ class Stats:
         for service, markets in metric.items():
             for market, seats in markets.items():
                 for seat, value in seats.items():
-                    market = '_'.join(market)
                     self.logger.add_scalar(f'services/{metric_name}/{service}/{market}/{seat}', value, ep_i)
 
 
@@ -409,8 +408,20 @@ class RobinEnv(ABC, Env):
             'services': {
                 'total_profit': sum(profit),
                 'profit': profit,
-                'prices': {service.id: service.prices for service in self.kernel.supply.services},
-                'tickets_sold': {service.id: service.tickets_sold_pair_seats for service in self.kernel.supply.services},
+                'prices': {
+                    service.id: {
+                        '_'.join(market): {
+                            seat.name: price for seat, price in seats.items()
+                        } for market, seats in service.prices.items()
+                    } for service in self.kernel.supply.services
+                },
+                'tickets_sold': {
+                    service.id: {
+                        '_'.join(market): {
+                            seat.name: count for seat, count in seats.items()
+                        } for market, seats in service.tickets_sold_pair_seats.items()
+                    } for service in self.kernel.supply.services
+                }
             },
             'passengers': {
                 'total': total_passengers,
