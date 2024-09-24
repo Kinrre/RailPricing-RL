@@ -1,6 +1,8 @@
 import numpy as np
 
 ACTION_FACTOR = 5
+LOW_ACTION = -1
+HIGH_ACTION = 1
 NUMBER_ACTIONS = 10
 START_ACTION = -5
 

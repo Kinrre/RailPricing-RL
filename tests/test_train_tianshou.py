@@ -5,7 +5,7 @@ import pprint
 import torch
 import yaml
 
-from src.robin.rl.entities import RobinEnvFactory, VectorEnvNormObsReward
+from src.robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormObsReward
 
 from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 from tianshou.env import SubprocVectorEnv, VectorEnvNormObs
@@ -27,8 +27,8 @@ def get_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser()
     parser.add_argument('--task', type=str, default='Tianshou_Business')
-    parser.add_argument('--path-config-supply', type=str, default='configs/rl/supply_data.yml')
-    parser.add_argument('--path-config-demand', type=str, default='configs/rl/demand_data.yml')
+    parser.add_argument('--path-config-supply', type=str, default='configs/rl/supply_data_connecting.yml')
+    parser.add_argument('--path-config-demand', type=str, default='configs/rl/demand_data_connecting.yml')
     parser.add_argument('--algo-name', type=str, default='TD3')
     parser.add_argument('--seed', type=int, default=0)
     parser.add_argument('--buffer-size', type=int, default=500_000)
@@ -82,14 +82,46 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
     Args:
         args (argparse.Namespace): Arguments from command line.
     """
+    # Logging
+    now = datetime.datetime.now().strftime('%d%m%y-%H%M%S')
+    log_name = os.path.join(args.task, args.algo_name, str(args.seed), now)
+    log_path = os.path.join(args.logdir, log_name)
+
+    logger_factory = LoggerFactoryDefault()
+    logger_factory.logger_type = 'tensorboard'
+    logger = logger_factory.create_logger(
+        log_dir=log_path,
+        experiment_name=log_name,
+        run_id=args.resume_id,
+        config_dict=vars(args),
+    )
+    log_args_and_git_commit(log_path, args)
+
+    def save_best_fn(policy: BasePolicy) -> None:
+        """
+        Save the best policy to the log directory and the environment statistics.
+
+        Args:
+            policy (BasePolicy): Policy to save.
+        """
+        torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
+        torch.save(env.obs_rms, os.path.join(log_path, 'obs_rms.pth'))
+        torch.save(env.reward_rms, os.path.join(log_path, 'reward_rms.pth'))
+
     # Environment
     torch.manual_seed(args.seed)
     env_fns = [
-        lambda: RobinEnvFactory.create(args.path_config_supply, args.path_config_demand, seed=args.seed + i * 1000) for i in range(args.training_num)
+        lambda: RobinEnvFactory.create(
+            path_config_supply=args.path_config_supply,
+            path_config_demand=args.path_config_demand,
+            multi_agent=False,
+            discrete_action_space=False,
+            seed=args.seed + i * 1000
+        ) for i in range(args.training_num)
     ]
-    env = SubprocVectorEnv(env_fns)
+    env = SubprocVectorEnv(env_fns=env_fns)
     env = VectorEnvNormObsReward(env)
-    test_env = SubprocVectorEnv(env_fns)
+    test_env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path)
     test_env = VectorEnvNormObs(test_env, update_obs_rms=False)
     test_env.set_obs_rms(env.obs_rms)
 
@@ -173,32 +205,6 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
     test_collector = Collector(policy, test_env)
     train_collector.reset()
     train_collector.collect(n_step=args.start_timesteps, random=True)
-
-    # Logging
-    now = datetime.datetime.now().strftime('%d%m%y-%H%M%S')
-    log_name = os.path.join(args.task, args.algo_name, str(args.seed), now)
-    log_path = os.path.join(args.logdir, log_name)
-
-    logger_factory = LoggerFactoryDefault()
-    logger_factory.logger_type = 'tensorboard'
-    logger = logger_factory.create_logger(
-        log_dir=log_path,
-        experiment_name=log_name,
-        run_id=args.resume_id,
-        config_dict=vars(args),
-    )
-    log_args_and_git_commit(log_path, args)
-
-    def save_best_fn(policy: BasePolicy) -> None:
-        """
-        Save the best policy to the log directory and the environment statistics.
-
-        Args:
-            policy (BasePolicy): Policy to save.
-        """
-        torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
-        torch.save(env.obs_rms, os.path.join(log_path, 'obs_rms.pth'))
-        torch.save(env.reward_rms, os.path.join(log_path, 'reward_rms.pth'))
 
     # Trainer
     result = OffpolicyTrainer(

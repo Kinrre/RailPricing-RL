@@ -5,7 +5,8 @@ import torch
 
 from robin.kernel.entities import Kernel
 from robin.supply.entities import Supply
-from robin.rl.constants import ACTION_FACTOR, NUMBER_ACTIONS, START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX, LOG_DIR
+from robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, NUMBER_ACTIONS, \
+    START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX, LOG_DIR
 
 from abc import ABC, abstractmethod
 from copy import deepcopy
@@ -287,6 +288,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         super().__init__(*args, **kwargs)
         self.stats = Stats(log_dir)
         self.episode_index = 0
+        self.n_envs = len(self.workers)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
         """
@@ -301,7 +303,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         obs, reward, terminated, truncated, info = super().step(action, *args, **kwargs)
         if terminated.all():
             self.stats.to_tensorboard(info, self.episode_index)
-            self.episode_index += 1
+            self.episode_index += self.n_envs
         return obs, reward, terminated, truncated, info
 
 
@@ -322,6 +324,7 @@ class RobinEnv(ABC, Env):
             path_config_supply: Path,
             path_config_demand: Path,
             departure_time_hard_restriction: bool = False,
+            discrete_action_space: bool = False,
             action_factor: int = ACTION_FACTOR,
             seed: Union[int, None] = None
     ) -> None:
@@ -332,6 +335,7 @@ class RobinEnv(ABC, Env):
             path_config_supply (Path): Path to the supply configuration file.
             path_config_demand (Path): Path to the demand configuration file.
             departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
+            discrete_action_space (bool): Whether the action space is discrete or continuous.
             action_factor (int): Factor to multiply the price action.
             seed (int, None): Seed for the random number generator.
         """
@@ -339,6 +343,7 @@ class RobinEnv(ABC, Env):
         self.path_config_demand = path_config_demand
         self.departure_time_hard_restriction = departure_time_hard_restriction
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
+        self.discrete_action_space = discrete_action_space
         self.action_factor = action_factor
         self.seed(seed)
 
@@ -595,7 +600,8 @@ class RobinEnv(ABC, Env):
                     spaces.Dict({
                         'seats': spaces.Tuple([
                             spaces.Dict({
-                                'price': spaces.Discrete(n=NUMBER_ACTIONS, start=START_ACTION)
+                                'price': spaces.Discrete(n=NUMBER_ACTIONS, start=START_ACTION) if self.discrete_action_space \
+                                    else spaces.Box(low=LOW_ACTION, high=HIGH_ACTION, shape=(), dtype=np.float32)
                             }) for _ in seats
                         ])
                     }) for _, seats in service.prices.items()
@@ -827,6 +833,7 @@ class RobinEnvFactory:
             path_config_demand: Path,
             multi_agent: bool = False,
             departure_time_hard_restriction: bool = False,
+            discrete_action_space: bool = False,
             action_factor: int = ACTION_FACTOR,
             seed: Union[int, None] = None
     ) -> RobinEnv:
@@ -838,6 +845,7 @@ class RobinEnvFactory:
             path_config_demand (Path): Path to the demand configuration file.
             multi_agent (bool): Whether to create a multi-agent environment.
             departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
+            discrete_action_space (bool): Whether the action space is discrete or continuous.
             action_factor (int): Factor to multiply the price action.
             seed (int, None): Seed for the random number generator.
         
@@ -849,6 +857,7 @@ class RobinEnvFactory:
                 path_config_supply=path_config_supply,
                 path_config_demand=path_config_demand,
                 departure_time_hard_restriction=departure_time_hard_restriction,
+                discrete_action_space=discrete_action_space,
                 action_factor=action_factor,
                 seed=seed
             )
@@ -859,6 +868,7 @@ class RobinEnvFactory:
                 path_config_supply=path_config_supply,
                 path_config_demand=path_config_demand,
                 departure_time_hard_restriction=departure_time_hard_restriction,
+                discrete_action_space=discrete_action_space,
                 action_factor=action_factor,
                 seed=seed
             )
