@@ -1,11 +1,10 @@
 import numpy as np
 
 from gymnasium import Env
-from src.robin.rl.entities import RobinEnvFactory
+from robin.rl.entities import RobinEnvFactory
 
-DEFAULT_CONFIG_DEMAND = 'configs/rl/demand_data.yml'
-DEFAULT_CONFIG_SUPPLY = 'configs/rl/supply_data.yml'
-DEFAULT_CONFIG_SUPPLY_MULTI_AGENT = 'configs/rl/supply_data_multi_agent.yml'
+DEFAULT_CONFIG_DEMAND = 'configs/rl/demand_data_connecting.yml'
+DEFAULT_CONFIG_SUPPLY = 'configs/rl/supply_data_connecting.yml'
 MULTI_AGENT = True
 DEFAULT_NUM_STEPS = 1_000
 SEED = 0
@@ -67,10 +66,9 @@ def test_multi_agent_env(env: Env, num_steps: int = DEFAULT_NUM_STEPS) -> None:
 
 
 if __name__ == '__main__':
-    config_supply = DEFAULT_CONFIG_SUPPLY_MULTI_AGENT if MULTI_AGENT else DEFAULT_CONFIG_SUPPLY
     env = RobinEnvFactory.create(
+        path_config_supply=DEFAULT_CONFIG_SUPPLY,
         path_config_demand=DEFAULT_CONFIG_DEMAND,
-        path_config_supply=config_supply,
         multi_agent=MULTI_AGENT,
         seed=SEED
     )
