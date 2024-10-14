@@ -8,7 +8,7 @@ import yaml
 from src.robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormObsReward
 
 from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
-from tianshou.env import SubprocVectorEnv, VectorEnvNormObs
+from tianshou.env import VectorEnvNormObs
 from tianshou.exploration import GaussianNoise
 from tianshou.highlevel.logger import LoggerFactoryDefault
 from tianshou.policy import TD3Policy
@@ -31,7 +31,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--path-config-demand', type=str, default='configs/rl/demand_data_connecting.yml')
     parser.add_argument('--algo-name', type=str, default='TD3')
     parser.add_argument('--seed', type=int, default=0)
-    parser.add_argument('--buffer-size', type=int, default=500_000)
+    parser.add_argument('--buffer-size', type=int, default=1_000_000)
     parser.add_argument('--hidden-sizes', type=int, nargs='*', default=[400, 300])
     parser.add_argument('--actor-lr', type=float, default=1e-4)
     parser.add_argument('--critic-lr', type=float, default=1e-3)
@@ -42,7 +42,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--noise-clip', type=float, default=0.5)
     parser.add_argument('--update-actor-freq', type=int, default=2)
     parser.add_argument('--start-timesteps', type=int, default=10_000)
-    parser.add_argument('--epoch', type=int, default=200)
+    parser.add_argument('--epoch', type=int, default=500)
     parser.add_argument('--step-per-epoch', type=int, default=2_500)
     parser.add_argument('--step-per-collect', type=int, default=1)
     parser.add_argument('--update-per-step', type=int, default=1)
@@ -86,6 +86,7 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
     now = datetime.datetime.now().strftime('%d%m%y-%H%M%S')
     log_name = os.path.join(args.task, args.algo_name, str(args.seed), now)
     log_path = os.path.join(args.logdir, log_name)
+    log_path_test = os.path.join(log_path, 'test')
 
     logger_factory = LoggerFactoryDefault()
     logger_factory.logger_type = 'tensorboard'
@@ -119,11 +120,13 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
             seed=args.seed + i * 1000
         ) for i in range(args.training_num)
     ]
-    env = SubprocVectorEnv(env_fns=env_fns)
+    env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path)
     env = VectorEnvNormObsReward(env)
-    test_env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path)
+    env.seed([args.seed + i * 1000 for i in range(args.training_num)])
+    test_env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path_test)
     test_env = VectorEnvNormObs(test_env, update_obs_rms=False)
     test_env.set_obs_rms(env.obs_rms)
+    test_env.seed([args.seed + (i + 1) * 100_000 for i in range(args.training_num)])
 
     # Print environment information
     obs_space = env.observation_space[0]

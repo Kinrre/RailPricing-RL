@@ -288,6 +288,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         super().__init__(*args, **kwargs)
         self.stats = Stats(log_dir)
         self.episode_index = 0
+        self.episode_length = 0
         self.n_envs = len(self.workers)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
@@ -336,7 +337,8 @@ class RobinEnv(ABC, Env):
             path_config_demand (Path): Path to the demand configuration file.
             departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
             discrete_action_space (bool): Whether the action space is discrete or continuous.
-            action_factor (int): Factor to multiply the price action.
+            action_factor (int): Factor to multiply the price action (discrete). If the action space is continuous
+                it is adjusted by multiplying the number of actions and dividing by half.
             seed (int, None): Seed for the random number generator.
         """
         self.path_config_supply = path_config_supply
@@ -344,8 +346,7 @@ class RobinEnv(ABC, Env):
         self.departure_time_hard_restriction = departure_time_hard_restriction
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         self.discrete_action_space = discrete_action_space
-        self.action_factor = action_factor
-        self.seed(seed)
+        self.action_factor = action_factor if discrete_action_space else action_factor * (NUMBER_ACTIONS / 2)
 
     @lru_cache(maxsize=None)
     def _get_element_idx_from_id(self, elements: tuple, id: str) -> int:
