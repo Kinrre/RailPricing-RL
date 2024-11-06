@@ -6,6 +6,7 @@ from robin.rl.entities import RobinEnvFactory
 DEFAULT_CONFIG_DEMAND = 'configs/rl/demand_data_connecting.yml'
 DEFAULT_CONFIG_SUPPLY = 'configs/rl/supply_data_connecting.yml'
 MULTI_AGENT = True
+COOPERATIVE = False
 DEFAULT_NUM_STEPS = 1_000
 SEED = 0
 
@@ -70,6 +71,7 @@ if __name__ == '__main__':
         path_config_supply=DEFAULT_CONFIG_SUPPLY,
         path_config_demand=DEFAULT_CONFIG_DEMAND,
         multi_agent=MULTI_AGENT,
+        cooperative=COOPERATIVE,
         seed=SEED
     )
     print(f'Number of services: {len(env.unwrapped.kernel.supply.services)}')

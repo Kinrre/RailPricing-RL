@@ -308,7 +308,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         return obs, reward, terminated, truncated, info
 
 
-class RobinEnv(ABC, Env):
+class BaseRobinEnv(ABC):
     """
     Abstract class for the Robin simulator environment.
 
@@ -612,7 +612,7 @@ class RobinEnv(ABC, Env):
         return action_space
 
 
-class RobinSingleAgentEnv(RobinEnv):
+class RobinSingleAgentEnv(BaseRobinEnv, Env):
     """
     Reinforcement learning single-agent environment for the Robin simulator.
     """
@@ -694,7 +694,7 @@ class RobinSingleAgentEnv(RobinEnv):
         return super().action_space(supply=self.kernel.supply)
 
 
-class RobinMultiAgentEnv(RobinEnv):
+class RobinMultiAgentEnv(BaseRobinEnv, Env):
     """
     Reinforcement learning multi-agent environment for the Robin simulator.
 
@@ -826,6 +826,33 @@ class RobinMultiAgentEnv(RobinEnv):
         return spaces.Tuple(action_spaces)
 
 
+class RobinMultiAgentCoopEnv(RobinMultiAgentEnv):
+    
+    def __init__(self, *args, **kwargs) -> None:
+        """
+        Initialize the multi-agent cooperative environment.
+        """
+        super().__init__(*args, **kwargs)
+        
+    def _get_reward(self, agent_idx: int, supply: Supply) -> float:
+        """
+        Get the reward of the environment.
+
+        The total profit of the services of a day is the reward.
+
+        Args:
+            agent_idx (int): Index of an agent.
+            supply (Supply): Supply of an agent.
+        
+        Returns:
+            float: Reward of the environment.
+        """
+        total_profit = sum(service.total_profit for service in self.kernel.supply.services)
+        reward = total_profit - self._last_total_profit[agent_idx]
+        self._last_total_profit[agent_idx] = total_profit
+        return reward
+
+
 class RobinEnvFactory:
 
     @staticmethod
@@ -833,11 +860,12 @@ class RobinEnvFactory:
             path_config_supply: Path,
             path_config_demand: Path,
             multi_agent: bool = False,
+            cooperative: bool = False,
             departure_time_hard_restriction: bool = False,
             discrete_action_space: bool = False,
             action_factor: int = ACTION_FACTOR,
             seed: Union[int, None] = None
-    ) -> RobinEnv:
+    ) -> BaseRobinEnv:
         """
         Create a Robin environment.
 
@@ -845,6 +873,7 @@ class RobinEnvFactory:
             path_config_supply (Path): Path to the supply configuration file.
             path_config_demand (Path): Path to the demand configuration file.
             multi_agent (bool): Whether to create a multi-agent environment.
+            cooperative (bool): Whether to create a cooperative multi-agent environment.
             departure_time_hard_restriction (bool): Whether to apply a hard restriction to the departure time.
             discrete_action_space (bool): Whether the action space is discrete or continuous.
             action_factor (int): Factor to multiply the price action.
@@ -854,14 +883,24 @@ class RobinEnvFactory:
             RobinEnv: Robin environment.
         """
         if multi_agent:
-            env = RobinMultiAgentEnv(
-                path_config_supply=path_config_supply,
-                path_config_demand=path_config_demand,
-                departure_time_hard_restriction=departure_time_hard_restriction,
-                discrete_action_space=discrete_action_space,
-                action_factor=action_factor,
-                seed=seed
-            )
+            if cooperative:
+                env = RobinMultiAgentCoopEnv(
+                    path_config_supply=path_config_supply,
+                    path_config_demand=path_config_demand,
+                    departure_time_hard_restriction=departure_time_hard_restriction,
+                    discrete_action_space=discrete_action_space,
+                    action_factor=action_factor,
+                    seed=seed
+                )
+            else:
+                env = RobinMultiAgentEnv(
+                    path_config_supply=path_config_supply,
+                    path_config_demand=path_config_demand,
+                    departure_time_hard_restriction=departure_time_hard_restriction,
+                    discrete_action_space=discrete_action_space,
+                    action_factor=action_factor,
+                    seed=seed
+                )
             env = FlattenMultiObservation(env)
             env = FlattenMultiAction(env)
         else:
