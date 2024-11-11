@@ -169,8 +169,22 @@ class Stats:
             log_dir (str): The directory to save the logs.
         """
         self.logger = SummaryWriter(log_dir)
+        
+    def log_marl_to_tensorboard(self, agents: list[str], returns: np.ndarray[float], ep_i: int) -> None:
+        """
+        Log the multi-agent reinforcement learning stats for a specific episode.
+        
+        Args:
+            agents (list[str]): Names of the agents.
+            returns (np.ndarray[float]): Returns of the environments.
+            ep_i (int): The episode index.
+        """
+        # Log mean returns
+        returns = np.mean(returns, axis=0)
+        for agent, _return in zip(agents, returns):
+            self.logger.add_scalar(f'marl/return/{agent}', _return, ep_i) 
 
-    def log_services_to_tensorboard(self, stats: list[dict], ep_i: int):
+    def log_services_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
         """
         Logs the services data to Tensorboard for a specific episode.
         
@@ -188,7 +202,7 @@ class Stats:
         mean_tickets_sold = self._calculate_mean_service([info['services']['tickets_sold'] for info in stats])
         self._log_service_metric_to_tensorboard(mean_tickets_sold, 'mean_tickets_sold', ep_i)
         
-    def log_passengers_to_tensorboard(self, stats: list[dict], ep_i: int):
+    def log_passengers_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
         """
         Logs the passengers data to Tensorboard for a specific episode.
         
@@ -216,14 +230,17 @@ class Stats:
         mean_utility = np.mean([info['passengers']['utility'] for info in stats])
         self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)
 
-    def to_tensorboard(self, stats: list[dict], ep_i: int):
+    def to_tensorboard(self, agents: list[str], stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
         """
         Logs the stats to Tensorboard for a specific episode.
         
         Args:
+            agents (list[str]): Names of the agents.
             stats (list[dict]): List of dictionaries containing stats at the end of an episode.
+            returns (np.ndarray[float]): Returns of the agents.
             ep_i (int): The episode index.
         """
+        self.log_marl_to_tensorboard(agents, returns, ep_i)
         self.log_services_to_tensorboard(stats, ep_i)
         self.log_passengers_to_tensorboard(stats, ep_i)
 
@@ -276,6 +293,13 @@ class Stats:
 class StatsSubprocVectorEnv(SubprocVectorEnv):
     """
     Subprocess vectorized environment with stats logging.
+    
+    Attributes:
+        stats (Stats): The Stats object to log data.
+        episode_index (int): The episode index.
+        n_envs (int): Number of environments.
+        num_agents (int): Number of agents in the environments.
+        returns (np.array[float]): Returns of the environments.
     """
     
     def __init__(self, log_dir: str = LOG_DIR, *args, **kwargs) -> None:
@@ -289,6 +313,9 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         self.stats = Stats(log_dir)
         self.episode_index = 0
         self.n_envs = len(self.workers)
+        self.agents = self.get_env_attr('agents')[0]
+        self.num_agents = self.get_env_attr('num_agents')[0]
+        self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
         """
@@ -301,8 +328,10 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
             Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
         """
         obs, reward, terminated, truncated, info = super().step(action, *args, **kwargs)
+        self.returns += reward
         if terminated.all():
-            self.stats.to_tensorboard(info, self.episode_index)
+            self.stats.to_tensorboard(self.agents, info, self.returns, self.episode_index)
+            self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
             self.episode_index += self.n_envs
         return obs, reward, terminated, truncated, info
 
@@ -614,6 +643,10 @@ class BaseRobinEnv(ABC):
 class RobinSingleAgentEnv(BaseRobinEnv, Env):
     """
     Reinforcement learning single-agent environment for the Robin simulator.
+    
+    Attributes:
+        agents (list[str]): Agents in the environment.
+        num_agents (int): Number of agents in the environment.
     """
 
     def __init__(self, *args, **kwargs) -> None:
@@ -621,6 +654,8 @@ class RobinSingleAgentEnv(BaseRobinEnv, Env):
         Initialize the single-agent environment.
         """
         super().__init__(*args, **kwargs)
+        self.agents = [tsp.name for tsp in self.kernel.supply.tsps]
+        self.num_agents = 1
         self._last_total_profit = 0
 
     def _get_reward(self) -> float:
