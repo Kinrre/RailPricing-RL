@@ -288,7 +288,6 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         super().__init__(*args, **kwargs)
         self.stats = Stats(log_dir)
         self.episode_index = 0
-        self.episode_length = 0
         self.n_envs = len(self.workers)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:

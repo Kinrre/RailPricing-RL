@@ -1,11 +1,13 @@
 import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../src')))
 
-from src.robin.kernel.entities import Kernel
+from robin.kernel.entities import Kernel
 
 os.makedirs('data/kernel_output', exist_ok=True)
 
-path_config_supply = 'configs/supply_data.yml'
-path_config_demand = 'configs/demand_data.yml'
+path_config_supply = 'configs/rl/supply_data_connecting.yml'
+path_config_demand = 'configs/rl/demand_data_connecting.yml'
 seed = 0
 
 kernel = Kernel(path_config_supply, path_config_demand, seed)

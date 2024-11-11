@@ -87,6 +87,7 @@ class Trainer:
         self.set_seed(self.args.seed)
         self.device = torch.device('cuda' if self.args.cuda and torch.cuda.is_available() else 'cpu')
         self.env = self.create_env()
+        self.episode_length = len(self.env.get_env_attr('kernel')[0].simulation_days)
         self.agent: Union[IQLSAC | VDN] = self._get_agent(self.args.algorithm)(
             env=self.env,
             device=self.device,
@@ -152,8 +153,37 @@ class Trainer:
         env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=self.run_name)
         env.seed([self.args.seed + i * 1000 for i in range(self.args.n_workers)])
         return env
-    
-    def log_stats(self, global_step: int, start_time: float, i: int, qf1_a_values: torch.Tensor, qf2_a_values: torch.Tensor, qf1_loss: torch.Tensor, qf2_loss: torch.Tensor, qf_loss: torch.Tensor, actor_loss: torch.Tensor) -> None:
+
+    def log_agents_rewards(self, global_step: int, start_time: float) -> None:
+        """
+        Log the rewards of the agents in the environment.
+
+        It logs the average episodic rewards.
+        
+        Args:
+            global_step (int): Current global step.
+            start_time (float): Start time of the experiment.
+        """
+        episodic_reward = self.replay_buffer.get_average_rewards(self.episode_length * self.args.n_workers)
+        for agent_idx, agent_episodic_reward in enumerate(episodic_reward):
+            self.writer.add_scalar(
+                f'agent_{agent_idx}/mean_episode_rewards',
+                self.episode_length * agent_episodic_reward,
+                global_step / self.episode_length
+            )
+
+    def log_stats(
+            self,
+            global_step: int,
+            start_time: float,
+            i: int,
+            qf1_a_values: torch.Tensor,
+            qf2_a_values: torch.Tensor,
+            qf1_loss: torch.Tensor,
+            qf2_loss: torch.Tensor,
+            qf_loss: torch.Tensor,
+            actor_loss: torch.Tensor
+    ) -> None:
         """
         Log the statistics of the training.
         
@@ -201,6 +231,7 @@ class Trainer:
             obs = next_obs
             if terminations.all():
                 obs, _ = self.env.reset()
+                self.log_agents_rewards(global_step, start_time)
 
             # Critic training
             if global_step > self.args.learning_starts:
