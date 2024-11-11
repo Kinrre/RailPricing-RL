@@ -214,7 +214,7 @@ class Stats:
         
         # Log mean utility
         mean_utility = np.mean([info['passengers']['utility'] for info in stats])
-        self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)    
+        self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)
 
     def to_tensorboard(self, stats: list[dict], ep_i: int):
         """

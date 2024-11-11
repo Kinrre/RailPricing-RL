@@ -1,3 +1,5 @@
+"""Constants for the ROBIN rl package."""
+
 import numpy as np
 
 ACTION_FACTOR = 5
