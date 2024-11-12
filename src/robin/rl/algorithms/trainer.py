@@ -15,10 +15,9 @@ from loguru import logger
 from torch.utils.tensorboard import SummaryWriter
 from typing import Literal, Union
 
-from robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv
 from robin.rl.algorithms.buffers import ReplayBuffer
-from robin.rl.algorithms.constants import IS_COOPERATIVE
 from robin.rl.algorithms.iql_sac import IQLSAC
+from robin.rl.algorithms.utils import create_env
 from robin.rl.algorithms.vdn import VDN
 
 
@@ -88,7 +87,14 @@ class Trainer:
         self.log_args_and_git_commit()
         self.set_seed(self.args.seed)
         self.device = torch.device('cuda' if self.args.cuda and torch.cuda.is_available() else 'cpu')
-        self.env = self.create_env()
+        self.env = create_env(
+            supply_config=self.args.supply_config,
+            demand_config=self.args.demand_config,
+            algorithm=self.args.algorithm,
+            seed=self.args.seed,
+            n_workers=self.args.n_workers,
+            run_name=self.run_name
+        )
         self.agent: Union[IQLSAC | VDN] = self._get_agent(self.args.algorithm)(
             env=self.env,
             device=self.device,
@@ -133,27 +139,6 @@ class Trainer:
                 yaml.dump(vars(data), f, sort_keys=False)
             else:
                 yaml.dump(data, f, sort_keys=False)
-
-    def create_env(self) -> StatsSubprocVectorEnv:
-        """
-        Create the ROBIN environment.
-            
-        Returns:
-            StatsSubprocVectorEnv: The ROBIN environment.
-        """
-        env_fns = [
-            lambda: RobinEnvFactory.create(
-                path_config_supply=self.args.supply_config,
-                path_config_demand=self.args.demand_config,
-                multi_agent=True,
-                cooperative=IS_COOPERATIVE[self.args.algorithm],
-                discrete_action_space=False,
-                seed=self.args.seed + i * 1000
-            ) for i in range(self.args.n_workers)
-        ]
-        env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=self.run_name)
-        env.seed([self.args.seed + i * 1000 for i in range(self.args.n_workers)])
-        return env
 
     def log_stats(
             self,
