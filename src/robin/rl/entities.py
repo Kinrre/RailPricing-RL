@@ -170,19 +170,23 @@ class Stats:
         """
         self.logger = SummaryWriter(log_dir)
         
-    def log_marl_to_tensorboard(self, agents: list[str], returns: np.ndarray[float], ep_i: int) -> None:
+    def log_agents_to_tensorboard(self, agents: list[str], stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
         """
-        Log the multi-agent reinforcement learning stats for a specific episode.
+        Log the agents data to Tensorboard for a specific episode.
         
         Args:
             agents (list[str]): Names of the agents.
+            stats (list[dict]): List of dictionaries containing stats at the end of an episode.
             returns (np.ndarray[float]): Returns of the environments.
             ep_i (int): The episode index.
         """
         # Log mean returns
-        returns = np.mean(returns, axis=0)
-        for agent, _return in zip(agents, returns):
-            self.logger.add_scalar(f'marl/return/{agent}', _return, ep_i) 
+        mean_returns = np.mean(returns, axis=0)
+        self._log_agent_metric_to_tensorboard(dict(zip(agents, mean_returns)), 'mean_return', ep_i)
+        
+        # Log mean profit
+        mean_profits = self._calculate_mean_agent([info['agents']['profit'] for info in stats])
+        self._log_agent_metric_to_tensorboard(mean_profits, 'mean_profit', ep_i)
 
     def log_services_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
         """
@@ -240,9 +244,31 @@ class Stats:
             returns (np.ndarray[float]): Returns of the agents.
             ep_i (int): The episode index.
         """
-        self.log_marl_to_tensorboard(agents, returns, ep_i)
+        self.log_agents_to_tensorboard(agents, stats, returns, ep_i)
         self.log_services_to_tensorboard(stats, ep_i)
         self.log_passengers_to_tensorboard(stats, ep_i)
+
+    def _calculate_mean_agent(self, agent_metric_list: list[dict[str, float]]) -> dict[str, float]:
+        """
+        Calculates the mean metric for each agent.
+        
+        Args:
+            agent_metric_list (list[dict[str, float]]): List of dictionaries containing the metric for each agent.
+        """
+        aggregated_metric = {}
+
+        # Aggregate metric for each agent
+        for env in agent_metric_list:
+            for agent, value in env.items():
+                if agent not in aggregated_metric:
+                    aggregated_metric[agent] = []
+                aggregated_metric[agent].append(value)
+
+        # Calculate the mean for each agent
+        for agent, values in aggregated_metric.items():
+            aggregated_metric[agent] = np.mean(values)
+
+        return aggregated_metric
 
     def _calculate_mean_service(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
         """
@@ -275,6 +301,18 @@ class Stats:
 
         return aggregated_metric
     
+    def _log_agent_metric_to_tensorboard(self, metric: dict[str, float], metric_name: str, ep_i: int):
+        """
+        Logs the calculated mean metric for each agent to Tensorboard.
+        
+        Args:
+            metric (dict[str, float]): Dictionary containing the calculated mean metric for each agent.
+            metric_name (str): The name of the metric to log.
+            ep_i (int): The episode index.
+        """
+        for agent, value in metric.items():
+            self.logger.add_scalar(f'agents/{metric_name}/{agent}', value, ep_i)
+
     def _log_service_metric_to_tensorboard(self, metric: dict[str, dict[str, dict[str, float]]], metric_name: str, ep_i: int):
         """
         Logs the calculated mean tickets sold for each service, market, and seat to Tensorboard.
@@ -436,9 +474,13 @@ class BaseRobinEnv(ABC):
             dict: Info of the environment.
         """
         profit = [service.total_profit for service in self.kernel.supply.services]
+        agents_profit = {tsp.name: sum(service.total_profit for service in self.kernel.supply.services if service.tsp.id == tsp.id) for tsp in self.kernel.supply.tsps}
         total_passengers = len(self.kernel.passengers)
         traveling_passengers = len([passenger for passenger in self.kernel.passengers if passenger.journey])
         info = {
+            'agents': {
+                'profit': agents_profit
+            },
             'services': {
                 'total_profit': sum(profit),
                 'profit': profit,
