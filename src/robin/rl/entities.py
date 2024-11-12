@@ -196,12 +196,16 @@ class Stats:
         mean_profits = self._calculate_mean_agent_metric([info['agents']['profit'] for info in stats])
         self._log_agent_metric_to_tensorboard(mean_profits, 'mean_profit', ep_i)
 
+        # Calculate mean profits
+        profits = np.array([list(info['agents']['profit'].values()) for info in stats], dtype=np.float32)
+        mean_profits = np.mean(profits, axis=0)
+
         # Log efficiency
-        mean_efficiency = self._calculate_mean_efficiency(returns)
+        mean_efficiency = self._calculate_mean_efficiency(mean_profits)
         self.logger.add_scalar('agents/mean_efficiency', mean_efficiency, ep_i)
 
         # Log equality
-        mean_equality = self._calculate_mean_equality(returns)
+        mean_equality = self._calculate_mean_equality(mean_profits)
         self.logger.add_scalar('agents/mean_equality', mean_equality, ep_i)
 
     def log_services_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
@@ -285,31 +289,30 @@ class Stats:
 
         return aggregated_metric
 
-    def _calculate_mean_efficiency(self, returns: np.ndarray[float]) -> float:
+    def _calculate_mean_efficiency(self, profits: np.ndarray[float]) -> float:
         """
         Calculates the mean efficiency of the agents.
 
         Args:
-            returns (np.ndarray[float]): Returns of the agents.
+            profits (np.ndarray[float]): Profits of the agents.
 
         Returns:
             float: Mean efficiency of the agents.
         """
-        return np.sum(np.mean(returns, axis=0)) / self.episode_length
+        return np.sum(profits) / self.episode_length
 
-    def _calculate_mean_equality(self, returns: np.ndarray[float]) -> float:
+    def _calculate_mean_equality(self, profits: np.ndarray[float]) -> float:
         """
         Calculates the mean equality of the agents.
 
         Args:
-            returns (np.ndarray[float]): Returns of the agents.
+            profits (np.ndarray[float]): Profits of the agents.
 
         Returns:
             float: Mean equality of the agents.
         """
-        mean_returns = np.mean(returns, axis=0)
-        pairwise_differences = np.sum(np.abs(mean_returns[:, np.newaxis] - mean_returns))
-        normalization_factor = 2 * self.num_agents * np.sum(mean_returns)
+        pairwise_differences = np.sum(np.abs(profits[:, np.newaxis] - profits))
+        normalization_factor = 2 * self.num_agents * np.sum(profits)
         return 1 - pairwise_differences / normalization_factor
 
     def _calculate_mean_service_metric(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
