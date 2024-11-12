@@ -158,35 +158,51 @@ class Stats:
     Stats class to log data from the environment using a SummaryWriter.
     
     Attributes:
+        agents (list[str]): Agents in the environment.
+        num_agents (int): Number of agents in the environment.
+        episode_length (int): Length of the episode.
         logger (SummaryWriter): A TensorboardX SummaryWriter instance for logging.
     """
     
-    def __init__(self, log_dir: str = LOG_DIR) -> None:
+    def __init__(self, agents: list[str], num_agents: int, episode_length: int, log_dir: str = LOG_DIR) -> None:
         """
         Initializes the Stats object to log data using SummaryWriter.
         
         Args:
+            agents (list[str]): List of agents in the environment.
+            num_agents (int): Number of agents in the environment.
+            episode_length (int): Length of the episode.
             log_dir (str): The directory to save the logs.
         """
+        self.agents = agents
+        self.num_agents = num_agents
+        self.episode_length = episode_length
         self.logger = SummaryWriter(log_dir)
         
-    def log_agents_to_tensorboard(self, agents: list[str], stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
+    def log_agents_to_tensorboard(self, stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
         """
         Log the agents data to Tensorboard for a specific episode.
         
         Args:
-            agents (list[str]): Names of the agents.
             stats (list[dict]): List of dictionaries containing stats at the end of an episode.
             returns (np.ndarray[float]): Returns of the environments.
             ep_i (int): The episode index.
         """
         # Log mean returns
         mean_returns = np.mean(returns, axis=0)
-        self._log_agent_metric_to_tensorboard(dict(zip(agents, mean_returns)), 'mean_return', ep_i)
+        self._log_agent_metric_to_tensorboard(dict(zip(self.agents, mean_returns)), 'mean_return', ep_i)
         
         # Log mean profit
-        mean_profits = self._calculate_mean_agent([info['agents']['profit'] for info in stats])
+        mean_profits = self._calculate_mean_agent_metric([info['agents']['profit'] for info in stats])
         self._log_agent_metric_to_tensorboard(mean_profits, 'mean_profit', ep_i)
+
+        # Log efficiency
+        mean_efficiency = self._calculate_mean_efficiency(returns)
+        self.logger.add_scalar('agents/mean_efficiency', mean_efficiency, ep_i)
+
+        # Log equality
+        mean_equality = self._calculate_mean_equality(returns)
+        self.logger.add_scalar('agents/mean_equality', mean_equality, ep_i)
 
     def log_services_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
         """
@@ -201,9 +217,9 @@ class Stats:
         self.logger.add_scalar('services/mean_total_profit', mean_total_profit, ep_i)
 
         # Log mean prices and tickets sold for each service, market, and seat
-        mean_prices = self._calculate_mean_service([info['services']['prices'] for info in stats])
+        mean_prices = self._calculate_mean_service_metric([info['services']['prices'] for info in stats])
         self._log_service_metric_to_tensorboard(mean_prices, 'mean_last_prices', ep_i)
-        mean_tickets_sold = self._calculate_mean_service([info['services']['tickets_sold'] for info in stats])
+        mean_tickets_sold = self._calculate_mean_service_metric([info['services']['tickets_sold'] for info in stats])
         self._log_service_metric_to_tensorboard(mean_tickets_sold, 'mean_tickets_sold', ep_i)
         
     def log_passengers_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
@@ -234,21 +250,20 @@ class Stats:
         mean_utility = np.mean([info['passengers']['utility'] for info in stats])
         self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)
 
-    def to_tensorboard(self, agents: list[str], stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
+    def to_tensorboard(self, stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
         """
         Logs the stats to Tensorboard for a specific episode.
         
         Args:
-            agents (list[str]): Names of the agents.
             stats (list[dict]): List of dictionaries containing stats at the end of an episode.
             returns (np.ndarray[float]): Returns of the agents.
             ep_i (int): The episode index.
         """
-        self.log_agents_to_tensorboard(agents, stats, returns, ep_i)
+        self.log_agents_to_tensorboard(stats, returns, ep_i)
         self.log_services_to_tensorboard(stats, ep_i)
         self.log_passengers_to_tensorboard(stats, ep_i)
 
-    def _calculate_mean_agent(self, agent_metric_list: list[dict[str, float]]) -> dict[str, float]:
+    def _calculate_mean_agent_metric(self, agent_metric_list: list[dict[str, float]]) -> dict[str, float]:
         """
         Calculates the mean metric for each agent.
         
@@ -270,7 +285,34 @@ class Stats:
 
         return aggregated_metric
 
-    def _calculate_mean_service(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
+    def _calculate_mean_efficiency(self, returns: np.ndarray[float]) -> float:
+        """
+        Calculates the mean efficiency of the agents.
+
+        Args:
+            returns (np.ndarray[float]): Returns of the agents.
+
+        Returns:
+            float: Mean efficiency of the agents.
+        """
+        return np.sum(np.mean(returns, axis=0)) / self.episode_length
+
+    def _calculate_mean_equality(self, returns: np.ndarray[float]) -> float:
+        """
+        Calculates the mean equality of the agents.
+
+        Args:
+            returns (np.ndarray[float]): Returns of the agents.
+
+        Returns:
+            float: Mean equality of the agents.
+        """
+        mean_returns = np.mean(returns, axis=0)
+        pairwise_differences = np.sum(np.abs(mean_returns[:, np.newaxis] - mean_returns))
+        normalization_factor = 2 * self.num_agents * np.sum(mean_returns)
+        return 1 - pairwise_differences / normalization_factor
+
+    def _calculate_mean_service_metric(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
         """
         Calculates the mean service metric for each service.
         
@@ -337,6 +379,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         episode_index (int): The episode index.
         n_envs (int): Number of environments.
         num_agents (int): Number of agents in the environments.
+        episode_length (int): Length of the episode.
         returns (np.array[float]): Returns of the environments.
     """
     
@@ -348,12 +391,13 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
             log_dir (str): The directory to save the logs.
         """
         super().__init__(*args, **kwargs)
-        self.stats = Stats(log_dir)
         self.episode_index = 0
         self.n_envs = len(self.workers)
         self.agents = self.get_env_attr('agents')[0]
         self.num_agents = self.get_env_attr('num_agents')[0]
+        self.episode_length = len(self.get_env_attr('kernel')[0].simulation_days)
         self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
+        self.stats = Stats(self.agents, self.num_agents, self.episode_length, log_dir)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
         """
@@ -368,7 +412,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         obs, reward, terminated, truncated, info = super().step(action, *args, **kwargs)
         self.returns += reward
         if terminated.all():
-            self.stats.to_tensorboard(self.agents, info, self.returns, self.episode_index)
+            self.stats.to_tensorboard(info, self.returns, self.episode_index)
             self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
             self.episode_index += self.n_envs
         return obs, reward, terminated, truncated, info
