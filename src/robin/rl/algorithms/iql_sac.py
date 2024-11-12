@@ -61,3 +61,22 @@ class IQLSAC:
         """
         actions, log_prob, mean = zip(*[actor.get_action(obs[agent_idx]) for agent_idx, actor in enumerate(self.actor)])
         return list(actions), torch.stack(log_prob), list(mean)
+
+    def save_model(self, path: str) -> None:
+        """
+        Save the model parameters to a file.
+        
+        Args:
+            path (str): The path to save the model parameters to.
+        """
+        save_dict = {
+            'num_agents': self.num_agents,
+            'actor': [actor.state_dict() for actor in self.actor],
+            'qf1': [qf1.state_dict() for qf1 in self.qf1],
+            'qf2': [qf2.state_dict() for qf2 in self.qf2],
+            'qf1_target': [qf1_target.state_dict() for qf1_target in self.qf1_target],
+            'qf2_target': [qf2_target.state_dict() for qf2_target in self.qf2_target],
+            'q_optimizer': [q_opt.state_dict() for q_opt in self.q_optimizer],
+            'actor_optimizer': [actor_opt.state_dict() for actor_opt in self.actor_optimizer]
+        }
+        torch.save(save_dict, path)

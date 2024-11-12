@@ -118,7 +118,7 @@ class Trainer:
         elif algorithm == 'vdn':
             return VDN
         else:
-            raise ValueError(f'Algorithm {algorithm} not supported.')
+            raise Exception(f'Algorithm {algorithm} not supported.')
     
     def _log_yaml(self, filename: str, data: dict, use_vars: bool = False) -> None:
         """
@@ -198,7 +198,7 @@ class Trainer:
         self._log_yaml('demand_config.yml', yaml.safe_load(open(self.args.demand_config)), use_vars=False)
         os.system(f'git log -1 > {self.run_name}/commit.txt')
         os.system(f'git diff > {self.run_name}/diff.patch')
-    
+
     def train(self) -> None:
         """
         Train the agent.
@@ -219,7 +219,8 @@ class Trainer:
             # Critic training
             if global_step > self.args.learning_starts:
                 self.train_critic(global_step, start_time)
-                        
+
+        self.agent.save_model(f'{self.run_name}/model.pt')
         self.env.close()
         self.writer.close()
     
