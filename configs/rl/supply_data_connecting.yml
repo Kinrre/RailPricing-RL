@@ -106,15 +106,15 @@ rollingStock:
 
 trainServiceProvider:
 - id: '1'
-  name: Renfe
+  name: Agent_A
   rolling_stock:
   - '1'
 - id: '2'
-  name: Ouigo
+  name: Agent_B
   rolling_stock:
   - '1'
 - id: '3'
-  name: Iryo
+  name: Agent_C
   rolling_stock:
   - '1'
 
