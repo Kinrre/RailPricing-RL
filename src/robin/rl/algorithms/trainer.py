@@ -17,7 +17,7 @@ from typing import Literal, Union
 
 from robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv
 from robin.rl.algorithms.buffers import ReplayBuffer
-from robin.rl.algorithms.constants import DEFAULT_OUTPUT_DIR, IS_COOPERATIVE
+from robin.rl.algorithms.constants import IS_COOPERATIVE
 from robin.rl.algorithms.iql_sac import IQLSAC
 from robin.rl.algorithms.vdn import VDN
 
@@ -26,6 +26,8 @@ from robin.rl.algorithms.vdn import VDN
 class TrainerArgs:
     algorithm: Literal['iql_sac', 'vdn'] = 'iql_sac'
     """the algorithm to use"""
+    output_dir: str = 'models'
+    """the output directory to store the logs"""
     exp_name: str = 'default'
     """the name of this experiment"""
     supply_config: str = 'configs/rl/supply_data_connecting.yml'
@@ -72,19 +74,16 @@ class Trainer:
         replay_buffer (ReplayBuffer): Replay buffer for storing the experiences.
     """ 
     
-    def __init__(self, output_dir: str = DEFAULT_OUTPUT_DIR) -> None:
+    def __init__(self) -> None:
         """
         Initialize the trainer.
         
         It uses the arguments from the command line to initialize the trainer,
         please refer to the TrainerArgs class.
-        
-        Args:
-            output_dir (str): Directory to store the tensorboard logs.
         """
         self.args = tyro.cli(TrainerArgs)
         now = datetime.datetime.now().strftime('%d%m%y-%H%M%S')
-        self.run_name = f'{output_dir}/{self.args.exp_name}/{self.args.algorithm}/{self.args.seed}/{now}'
+        self.run_name = f'{self.args.output_dir}/{self.args.exp_name}/{self.args.algorithm}/{self.args.seed}/{now}'
         self.writer = SummaryWriter(self.run_name)
         self.log_args_and_git_commit()
         self.set_seed(self.args.seed)
