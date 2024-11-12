@@ -334,7 +334,7 @@ class Trainer:
             # Log statistics
             self.log_stats(global_step, start_time, agent_idx, qf1_a_values, qf2_a_values, qf1_loss, qf2_loss, qf_loss, actor_loss)
 
-    def sample_actions(self, obs: np.array, global_step: int) -> list[np.ndarray]:
+    def sample_actions(self, obs: np.ndarray, global_step: int) -> list[np.ndarray]:
         """
         Sample actions from the agent.
         
@@ -345,7 +345,7 @@ class Trainer:
             global_step (int): Current global step.
             
         Returns:
-            list[np.ndarray]: Actions sampled from the agent.
+            agent_actions (list[np.ndarray]): Actions sampled from the agent.
         """
         if global_step < self.args.learning_starts:
             agent_actions = np.array([[self.env.action_space[0][agent_i].sample() for agent_i in range(self.agent.num_agents)]
@@ -359,7 +359,7 @@ class Trainer:
             agent_actions = [[ac[i] for ac in agent_actions] for i in range(self.env.n_envs)]
         return agent_actions
     
-    def step_and_push(self, obs: np.array, agent_actions: list[np.ndarray]) -> tuple[np.array, np.array]:
+    def step_and_push(self, obs: np.ndarray, agent_actions: list[np.ndarray]) -> tuple[np.array, np.array]:
         """
         Step the environment and push the data to the replay buffer.
         

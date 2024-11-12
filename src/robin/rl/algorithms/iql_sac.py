@@ -62,6 +62,29 @@ class IQLSAC:
         actions, log_prob, mean = zip(*[actor.get_action(obs[agent_idx]) for agent_idx, actor in enumerate(self.actor)])
         return list(actions), torch.stack(log_prob), list(mean)
 
+    @classmethod
+    def load_model(cls, path: str, env: StatsSubprocVectorEnv, device: torch.device) -> 'IQLSAC':
+        """
+        Load the model parameters from a file.
+
+        Args:
+            path (str): The path to load the model parameters from.
+            env (StatsSubprocVectorEnv): The environment.
+            device (torch.device): The device to run the algorithm on.
+        """
+        save_dict = torch.load(path)
+        model = cls(env, device)
+        model.num_agents = save_dict['num_agents']
+        for agent_idx in range(model.num_agents):
+            model.actor[agent_idx].load_state_dict(save_dict['actor'][agent_idx])
+            model.qf1[agent_idx].load_state_dict(save_dict['qf1'][agent_idx])
+            model.qf2[agent_idx].load_state_dict(save_dict['qf2'][agent_idx])
+            model.qf1_target[agent_idx].load_state_dict(save_dict['qf1_target'][agent_idx])
+            model.qf2_target[agent_idx].load_state_dict(save_dict['qf2_target'][agent_idx])
+            model.q_optimizer[agent_idx].load_state_dict(save_dict['q_optimizer'][agent_idx])
+            model.actor_optimizer[agent_idx].load_state_dict(save_dict['actor_optimizer'][agent_idx])
+        return model
+
     def save_model(self, path: str) -> None:
         """
         Save the model parameters to a file.
