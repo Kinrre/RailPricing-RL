@@ -141,7 +141,7 @@ class Evaluator:
         """
         # rearrange actions to be per agent
         agents_actions = [[ac[i] for ac in actions] for i in range(self.agent.num_agents)]
-        episode = global_step // self.env.n_envs // self.episode_length
+        episode = (global_step // self.env.n_envs // self.episode_length) * self.env.n_envs
         timestep = global_step % self.episode_length
         for agent_id, agent_actions in enumerate(agents_actions):
             stacked_actions = np.vstack(agent_actions).reshape(-1, self.env.n_envs)
