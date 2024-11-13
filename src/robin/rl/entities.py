@@ -459,7 +459,7 @@ class BaseRobinEnv(ABC):
         self.departure_time_hard_restriction = departure_time_hard_restriction
         self.kernel = Kernel(self.path_config_supply, self.path_config_demand, seed)
         self.discrete_action_space = discrete_action_space
-        self.action_factor = action_factor if discrete_action_space else action_factor * (NUMBER_ACTIONS / 2)
+        self.action_factor = action_factor if discrete_action_space else action_factor * ((NUMBER_ACTIONS - 1) / 2)
 
     @lru_cache(maxsize=None)
     def _get_element_idx_from_id(self, elements: tuple, id: str) -> int:
