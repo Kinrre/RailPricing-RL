@@ -192,8 +192,8 @@ class Trainer:
 
         for global_step in range(0, self.args.total_timesteps, self.env.n_envs):
             # Sample actions from the agent and step the environment
-            agent_actions = self.sample_actions(obs, global_step)
-            next_obs, terminations = self.step_and_push(obs, agent_actions)
+            actions = self.sample_actions(obs, global_step)
+            next_obs, terminations = self.step_and_push(obs, actions)
             
             # Update observations
             obs = next_obs
@@ -345,10 +345,10 @@ class Trainer:
             global_step (int): Current global step.
             
         Returns:
-            agent_actions (list[np.ndarray]): Actions sampled from the agent.
+            actions (list[np.ndarray]): Actions sampled from the agent for each environment.
         """
         if global_step < self.args.learning_starts:
-            agent_actions = np.array([[self.env.action_space[0][agent_i].sample() for agent_i in range(self.agent.num_agents)]
+            actions = np.array([[self.env.action_space[0][agent_i].sample() for agent_i in range(self.agent.num_agents)]
                             for _ in range(self.env.n_envs)], dtype=object)
         with torch.no_grad():
             torch_obs = [torch.tensor(np.vstack(obs[:, i]), dtype=torch.float32).to(self.device)
@@ -356,8 +356,8 @@ class Trainer:
             agent_actions, _, _ = self.agent.get_action(torch_obs)
             agent_actions = [action.cpu().detach().numpy() for action in agent_actions]
             # rearrange actions to be per environment
-            agent_actions = [[ac[i] for ac in agent_actions] for i in range(self.env.n_envs)]
-        return agent_actions
+            actions = [[ac[i] for ac in agent_actions] for i in range(self.env.n_envs)]
+        return actions
     
     def step_and_push(self, obs: np.ndarray, agent_actions: list[np.ndarray]) -> tuple[np.array, np.array]:
         """
