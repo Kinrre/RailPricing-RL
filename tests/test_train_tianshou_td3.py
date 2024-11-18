@@ -5,7 +5,7 @@ import pprint
 import torch
 import yaml
 
-from src.robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormReward
+from robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormReward
 
 from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
 from tianshou.exploration import GaussianNoise
@@ -35,7 +35,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--actor-lr', type=float, default=1e-4)
     parser.add_argument('--critic-lr', type=float, default=1e-3)
     parser.add_argument('--gamma', type=float, default=0.99)
-    parser.add_argument('--tau', type=float, default=1e-3)
+    parser.add_argument('--tau', type=float, default=0.005)
     parser.add_argument('--exploration-noise', type=float, default=0.1)
     parser.add_argument('--policy-noise', type=float, default=0.2)
     parser.add_argument('--noise-clip', type=float, default=0.5)
