@@ -40,7 +40,7 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--policy-noise', type=float, default=0.2)
     parser.add_argument('--noise-clip', type=float, default=0.5)
     parser.add_argument('--update-actor-freq', type=int, default=2)
-    parser.add_argument('--start-timesteps', type=int, default=50_000)
+    parser.add_argument('--start-timesteps', type=int, default=5_000)
     parser.add_argument('--epoch', type=int, default=400)
     parser.add_argument('--step-per-epoch', type=int, default=2_500)
     parser.add_argument('--step-per-collect', type=int, default=1)

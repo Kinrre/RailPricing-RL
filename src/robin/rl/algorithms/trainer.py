@@ -44,7 +44,7 @@ class TrainerArgs:
     """total timesteps to train the agent"""
     buffer_size: int = 1_000_000
     """size of the replay buffer"""
-    learning_starts: int = 50_000
+    learning_starts: int = 5_000
     """number of timesteps to start learning"""
     batch_size: int = 256
     """the batch size of sample from the reply memory"""
