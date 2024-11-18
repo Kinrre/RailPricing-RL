@@ -16,6 +16,7 @@ from torch.utils.tensorboard import SummaryWriter
 from typing import Literal, Union
 
 from robin.rl.algorithms.buffers import ReplayBuffer
+from robin.rl.algorithms.constants import TRAINER_SEED_RANK_MULTIPLIER
 from robin.rl.algorithms.iql_sac import IQLSAC
 from robin.rl.algorithms.utils import create_env
 from robin.rl.algorithms.vdn import VDN
@@ -92,6 +93,7 @@ class Trainer:
             demand_config=self.args.demand_config,
             algorithm=self.args.algorithm,
             seed=self.args.seed,
+            seed=TRAINER_SEED_RANK_MULTIPLIER,
             n_workers=self.args.n_workers,
             run_name=self.run_name
         )

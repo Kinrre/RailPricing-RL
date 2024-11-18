@@ -7,6 +7,7 @@ import tyro
 from dataclasses import dataclass
 from typing import Literal, Union
 
+from robin.rl.algorithms.constants import EVALUATOR_SEED_RANK_MULTIPLIER
 from robin.rl.algorithms.iql_sac import IQLSAC
 from robin.rl.algorithms.utils import create_env
 from robin.rl.algorithms.vdn import VDN
@@ -60,6 +61,7 @@ class Evaluator:
             demand_config=f'{self.args.input_dir}/demand_config.yml',
             algorithm=self.args.algorithm,
             seed=self.args.seed,
+            seed_rank_multiplier=EVALUATOR_SEED_RANK_MULTIPLIER,
             n_workers=self.args.n_workers,
             run_name=self.evaluation_path
         )
