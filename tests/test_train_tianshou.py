@@ -5,10 +5,9 @@ import pprint
 import torch
 import yaml
 
-from src.robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormObsReward
+from src.robin.rl.entities import RobinEnvFactory, StatsSubprocVectorEnv, VectorEnvNormReward
 
 from tianshou.data import Collector, ReplayBuffer, VectorReplayBuffer
-from tianshou.env import VectorEnvNormObs
 from tianshou.exploration import GaussianNoise
 from tianshou.highlevel.logger import LoggerFactoryDefault
 from tianshou.policy import TD3Policy
@@ -41,8 +40,8 @@ def get_args() -> argparse.Namespace:
     parser.add_argument('--policy-noise', type=float, default=0.2)
     parser.add_argument('--noise-clip', type=float, default=0.5)
     parser.add_argument('--update-actor-freq', type=int, default=2)
-    parser.add_argument('--start-timesteps', type=int, default=10_000)
-    parser.add_argument('--epoch', type=int, default=500)
+    parser.add_argument('--start-timesteps', type=int, default=50_000)
+    parser.add_argument('--epoch', type=int, default=400)
     parser.add_argument('--step-per-epoch', type=int, default=2_500)
     parser.add_argument('--step-per-collect', type=int, default=1)
     parser.add_argument('--update-per-step', type=int, default=1)
@@ -106,7 +105,6 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
             policy (BasePolicy): Policy to save.
         """
         torch.save(policy.state_dict(), os.path.join(log_path, 'policy.pth'))
-        torch.save(env.obs_rms, os.path.join(log_path, 'obs_rms.pth'))
         torch.save(env.reward_rms, os.path.join(log_path, 'reward_rms.pth'))
 
     # Environment
@@ -121,11 +119,10 @@ def test_td3(args: argparse.Namespace = get_args()) -> None:
         ) for i in range(args.training_num)
     ]
     env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path)
-    env = VectorEnvNormObsReward(env)
+    env = VectorEnvNormReward(env)
     env.seed([args.seed + i * 1000 for i in range(args.training_num)])
     test_env = StatsSubprocVectorEnv(env_fns=env_fns, log_dir=log_path_test)
-    test_env = VectorEnvNormObs(test_env, update_obs_rms=False)
-    test_env.set_obs_rms(env.obs_rms)
+    test_env = VectorEnvNormReward(test_env)
     test_env.seed([args.seed + (i + 1) * 100_000 for i in range(args.training_num)])
 
     # Print environment information

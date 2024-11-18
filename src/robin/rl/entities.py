@@ -18,7 +18,7 @@ from gymnasium.wrappers import FlattenObservation
 from numpy.typing import NDArray
 from pathlib import Path
 from torch.utils.tensorboard import SummaryWriter
-from tianshou.env import SubprocVectorEnv, VectorEnvNormObs
+from tianshou.env import SubprocVectorEnv, VectorEnvNormObs, VectorEnvWrapper
 from tianshou.env.venvs import BaseVectorEnv
 from tianshou.utils import RunningMeanStd
 from tianshou.env.utils import gym_new_venv_step_type
@@ -89,7 +89,63 @@ class HeterogeneousRunningMeanStd(RunningMeanStd):
                 ), data_array.shape
             )
         return data_array
+
+
+class VectorEnvNormReward(VectorEnvWrapper):
+    """
+    Vector environment with normalized rewards.
     
+    Attributes:
+        reward_rms (RunningMeanStd): Running mean/std for the rewards.
+        update_reward_rms (bool): Whether to update the reward running mean/std.
+    """
+    
+    def __init__(
+        self,
+        venv: BaseVectorEnv,
+        update_reward_rms: bool = True,
+        clip_max: float = CLIP_MAX,
+        is_heterogeneous: bool = False
+    ) -> None:
+        """
+        Initialize the vector environment with normalized rewards.
+        
+        Args:
+            venv (BaseVectorEnv): Vector environment.
+            update_reward_rms (bool): Whether to update the reward running mean/std.
+            clip_max (float): Maximum absolute value for the data array.
+            is_heterogeneous (bool): Whether the data array is heterogeneous.
+        """
+        super().__init__(venv)
+        self.reward_rms = HeterogeneousRunningMeanStd(clip_max=clip_max) if is_heterogeneous \
+            else RunningMeanStd(clip_max=clip_max)
+        self.update_reward_rms = update_reward_rms
+        
+    def step(
+        self,
+        action: Union[np.ndarray, torch.Tensor],
+        id: Union[int, list[int], np.ndarray, None] = None,
+    ) -> gym_new_venv_step_type:
+        step_results = super().step(action, id)
+        # Normalize reward
+        if self.reward_rms and self.update_reward_rms:
+            self.reward_rms.update(step_results[1])
+        return (step_results[0], self._norm_reward(step_results[1]), *step_results[2:])
+
+    def _norm_reward(self, reward: float) -> np.ndarray:
+        """Normalize the reward."""
+        if self.reward_rms:
+            return self.reward_rms.norm(reward)
+        return reward
+
+    def set_reward_rms(self, reward_rms: RunningMeanStd) -> None:
+        """Set with given reward running mean/std."""
+        self.reward_rms = reward_rms
+    
+    def get_reward_rms(self) -> RunningMeanStd:
+        """Return reward running mean/std."""
+        return self.reward_rms
+
 
 class VectorEnvNormObsReward(VectorEnvNormObs):
     """
@@ -160,6 +216,7 @@ class Stats:
     Attributes:
         agents (list[str]): Agents in the environment.
         num_agents (int): Number of agents in the environment.
+        is_multiagent (bool): Whether the environment is multiagent.
         episode_length (int): Length of the episode.
         logger (SummaryWriter): A TensorboardX SummaryWriter instance for logging.
     """
@@ -176,6 +233,7 @@ class Stats:
         """
         self.agents = agents
         self.num_agents = num_agents
+        self.is_multiagent = num_agents > 1
         self.episode_length = episode_length
         self.logger = SummaryWriter(log_dir)
         
@@ -189,8 +247,9 @@ class Stats:
             ep_i (int): The episode index.
         """
         # Log mean returns
-        mean_returns = np.mean(returns, axis=0)
-        self._log_agent_metric_to_tensorboard(dict(zip(self.agents, mean_returns)), 'mean_return', ep_i)
+        if self.is_multiagent:
+            mean_returns = np.mean(returns, axis=0)
+            self._log_agent_metric_to_tensorboard(dict(zip(self.agents, mean_returns)), 'mean_return', ep_i)
         
         # Log mean profit
         mean_profits = self._calculate_mean_agent_metric([info['agents']['profit'] for info in stats])
@@ -205,7 +264,8 @@ class Stats:
         self.logger.add_scalar('agents/mean_efficiency', mean_efficiency, ep_i)
 
         # Log equality
-        mean_equality = self._calculate_mean_equality(mean_profits)
+        num_agents = len(mean_profits) # Update to the real number of agents (single-agent case)
+        mean_equality = self._calculate_mean_equality(mean_profits, num_agents)
         self.logger.add_scalar('agents/mean_equality', mean_equality, ep_i)
 
     def log_services_to_tensorboard(self, stats: list[dict], ep_i: int) -> None:
@@ -301,18 +361,19 @@ class Stats:
         """
         return np.sum(profits) / self.episode_length
 
-    def _calculate_mean_equality(self, profits: np.ndarray[float]) -> float:
+    def _calculate_mean_equality(self, profits: np.ndarray[float], num_agents: int) -> float:
         """
         Calculates the mean equality of the agents.
 
         Args:
             profits (np.ndarray[float]): Profits of the agents.
+            num_agents (int): Number of agents.
 
         Returns:
             float: Mean equality of the agents.
         """
         pairwise_differences = np.sum(np.abs(profits[:, np.newaxis] - profits))
-        normalization_factor = 2 * self.num_agents * np.sum(profits)
+        normalization_factor = 2 * num_agents * np.sum(profits)
         return 1 - pairwise_differences / normalization_factor
 
     def _calculate_mean_service_metric(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
@@ -382,6 +443,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         episode_index (int): The episode index.
         n_envs (int): Number of environments.
         num_agents (int): Number of agents in the environments.
+        is_multiagent (bool): Whether the environment is multiagent.
         episode_length (int): Length of the episode.
         returns (np.array[float]): Returns of the environments.
     """
@@ -398,9 +460,19 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         self.n_envs = len(self.workers)
         self.agents = self.get_env_attr('agents')[0]
         self.num_agents = self.get_env_attr('num_agents')[0]
+        self.is_multiagent = self.num_agents > 1
         self.episode_length = len(self.get_env_attr('kernel')[0].simulation_days)
-        self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
+        self.init_returns()
         self.stats = Stats(self.agents, self.num_agents, self.episode_length, log_dir)
+    
+    def init_returns(self) -> None:
+        """
+        Initialize the returns of the environments.
+        """
+        if self.is_multiagent:
+            self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
+        else:
+            self.returns = np.zeros(self.n_envs, dtype=np.float32)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
         """
@@ -416,7 +488,7 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         self.returns += reward
         if terminated.all():
             self.stats.to_tensorboard(info, self.returns, self.episode_index)
-            self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
+            self.init_returns()
             self.episode_index += self.n_envs
         return obs, reward, terminated, truncated, info
 
