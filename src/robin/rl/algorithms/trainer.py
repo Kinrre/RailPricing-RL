@@ -56,6 +56,8 @@ class TrainerArgs:
     """learning rate of the policy network optimizer"""
     q_lr: float = 3e-4
     """learning rate of the q network optimizer"""
+    policy_frequency: int = 2
+    """the frequency of training policy (delayed)"""
     alpha: float = 0.2
     """entropy regularization coefficient"""
 
@@ -93,7 +95,7 @@ class Trainer:
             demand_config=self.args.demand_config,
             algorithm=self.args.algorithm,
             seed=self.args.seed,
-            seed=TRAINER_SEED_RANK_MULTIPLIER,
+            seed_rank_multiplier=TRAINER_SEED_RANK_MULTIPLIER,
             n_workers=self.args.n_workers,
             run_name=self.run_name
         )
@@ -254,23 +256,27 @@ class Trainer:
             qf_loss.backward()
             self.agent.q_optimizer[agent_idx].step()
             
-            # Calculate actor loss
-            pi, log_pi, _ = self.agent.actor[agent_idx].get_action(observations[agent_idx])
-            qf1_pi = self.agent.qf1[agent_idx](observations[agent_idx], pi)
-            qf2_pi = self.agent.qf2[agent_idx](observations[agent_idx], pi)
-            min_qf_pi = torch.min(qf1_pi, qf2_pi)
-            actor_loss = ((self.args.alpha * log_pi) - min_qf_pi).mean()
+            # Delayed policy updates
+            _global_step = global_step // self.env.n_envs
+            if _global_step % self.args.policy_frequency == 0:
+                for _ in range(self.args.policy_frequency):
+                    # Calculate actor loss
+                    pi, log_pi, _ = self.agent.actor[agent_idx].get_action(observations[agent_idx])
+                    qf1_pi = self.agent.qf1[agent_idx](observations[agent_idx], pi)
+                    qf2_pi = self.agent.qf2[agent_idx](observations[agent_idx], pi)
+                    min_qf_pi = torch.min(qf1_pi, qf2_pi)
+                    actor_loss = ((self.args.alpha * log_pi) - min_qf_pi).mean()
 
-            # Optimize actor
-            self.agent.actor_optimizer[agent_idx].zero_grad()
-            actor_loss.backward()
-            self.agent.actor_optimizer[agent_idx].step()
-            
-            # Update the target networks
-            self.update_target_networks(agent_idx)
-            
-            # Log statistics
-            self.log_stats(global_step, start_time, agent_idx, qf1_a_values, qf2_a_values, qf1_loss, qf2_loss, qf_loss, actor_loss)
+                    # Optimize actor
+                    self.agent.actor_optimizer[agent_idx].zero_grad()
+                    actor_loss.backward()
+                    self.agent.actor_optimizer[agent_idx].step()
+                    
+                    # Update the target networks
+                    self.update_target_networks(agent_idx)
+                    
+                    # Log statistics
+                    self.log_stats(global_step, start_time, agent_idx, qf1_a_values, qf2_a_values, qf1_loss, qf2_loss, qf_loss, actor_loss)
 
     def train_vdn(self, global_step: int, start_time: float) -> None:
         """
@@ -317,24 +323,28 @@ class Trainer:
         
         for agent_idx in range(self.agent.num_agents):
             self.agent.q_optimizer[agent_idx].step()
-        
-            # Calculate actor loss
-            pi, log_pi, _ = self.agent.actor[agent_idx].get_action(observations[agent_idx])
-            qf1_pi = self.agent.qf1[agent_idx](observations[agent_idx], pi)
-            qf2_pi = self.agent.qf2[agent_idx](observations[agent_idx], pi)
-            min_qf_pi = torch.min(qf1_pi, qf2_pi)
-            actor_loss = ((self.args.alpha * log_pi) - min_qf_pi).mean()
+            
+            # Delayed policy updates
+            _global_step = global_step // self.env.n_envs
+            if _global_step % self.args.policy_frequency == 0:
+                for _ in range(self.args.policy_frequency):
+                    # Calculate actor loss
+                    pi, log_pi, _ = self.agent.actor[agent_idx].get_action(observations[agent_idx])
+                    qf1_pi = self.agent.qf1[agent_idx](observations[agent_idx], pi)
+                    qf2_pi = self.agent.qf2[agent_idx](observations[agent_idx], pi)
+                    min_qf_pi = torch.min(qf1_pi, qf2_pi)
+                    actor_loss = ((self.args.alpha * log_pi) - min_qf_pi).mean()
 
-            # Optimize actor
-            self.agent.actor_optimizer[agent_idx].zero_grad()
-            actor_loss.backward()
-            self.agent.actor_optimizer[agent_idx].step()
-            
-            # Update the target networks
-            self.update_target_networks(agent_idx)
-            
-            # Log statistics
-            self.log_stats(global_step, start_time, agent_idx, qf1_a_values, qf2_a_values, qf1_loss, qf2_loss, qf_loss, actor_loss)
+                    # Optimize actor
+                    self.agent.actor_optimizer[agent_idx].zero_grad()
+                    actor_loss.backward()
+                    self.agent.actor_optimizer[agent_idx].step()
+                    
+                    # Update the target networks
+                    self.update_target_networks(agent_idx)
+                    
+                    # Log statistics
+                    self.log_stats(global_step, start_time, agent_idx, qf1_a_values, qf2_a_values, qf1_loss, qf2_loss, qf_loss, actor_loss)
 
     def sample_actions(self, obs: np.ndarray, global_step: int) -> list[np.ndarray]:
         """
