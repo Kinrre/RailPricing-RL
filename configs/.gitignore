@@ -37,6 +37,7 @@
 !rl
 !rl/demand_data.yml
 !rl/demand_data_connecting.yml
+!rl/demand_data_student.yml
 !rl/supply_data.yml
 !rl/supply_data_multi_agent.yml
 !rl/supply_data_connecting.yml
