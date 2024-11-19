@@ -315,6 +315,10 @@ class Stats:
         mean_utility = np.mean([info['passengers']['utility'] for info in stats])
         self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)
 
+        # Log mean number of transfers
+        mean_n_transfers = self._calculate_mean_passenger_metric([info['passengers']['n_transfers'] for info in stats])
+        self._log_passenger_metric_to_tensorboard(mean_n_transfers, 'mean_n_transfers', ep_i)
+
         # Log mean user patterns travelling
         mean_user_pattern_travelling = self._calculate_mean_passenger_metric([info['passengers']['user_patterns']['travelling'] for info in stats])
         self._log_passenger_metric_to_tensorboard(mean_user_pattern_travelling, 'mean_user_pattern_travelling', ep_i)
@@ -655,6 +659,7 @@ class BaseRobinEnv(ABC):
                 'not_travelling': total_passengers - traveling_passengers,
                 'percentage_travelling': traveling_passengers / total_passengers * 100,
                 'utility': np.mean([passenger.utility for passenger in self.kernel.passengers]),
+                'n_transfers': dict(Counter(str(passenger.journey.n_transfers) for passenger in self.kernel.passengers if passenger.journey)),
                 'user_patterns': {
                     'travelling': dict(Counter(passenger.user_pattern.name for passenger in self.kernel.passengers if passenger.journey))
                 }
