@@ -9,6 +9,7 @@ from robin.rl.constants import ACTION_FACTOR, LOW_ACTION, HIGH_ACTION, NUMBER_AC
     START_ACTION, LOW_PRICE, HIGH_PRICE, CLIP_MAX, LOG_DIR
 
 from abc import ABC, abstractmethod
+from collections import Counter
 from copy import deepcopy
 from functools import cached_property, lru_cache
 from gymnasium import ActionWrapper, Env, ObservationWrapper
@@ -314,6 +315,10 @@ class Stats:
         mean_utility = np.mean([info['passengers']['utility'] for info in stats])
         self.logger.add_scalar('passengers/mean_utility', mean_utility, ep_i)
 
+        # Log mean user patterns travelling
+        mean_user_pattern_travelling = self._calculate_mean_passenger_metric([info['passengers']['user_patterns']['travelling'] for info in stats])
+        self._log_passenger_metric_to_tensorboard(mean_user_pattern_travelling, 'mean_user_pattern_travelling', ep_i)
+
     def to_tensorboard(self, stats: list[dict], returns: np.ndarray[float], ep_i: int) -> None:
         """
         Logs the stats to Tensorboard for a specific episode.
@@ -376,6 +381,28 @@ class Stats:
         normalization_factor = 2 * num_agents * np.sum(profits)
         return 1 - pairwise_differences / normalization_factor
 
+    def _calculate_mean_passenger_metric(self, passenger_metric_list: list[dict[str, float]]) -> dict[str, float]:
+        """
+        Calculates the mean metric for each passenger.
+        
+        Args:
+            passenger_metric_list (list[dict[str, float]]): List of dictionaries containing the metric for each passenger.
+        """
+        aggregated_metric = {}
+
+        # Aggregate metric for each passenger
+        for env in passenger_metric_list:
+            for passenger, value in env.items():
+                if passenger not in aggregated_metric:
+                    aggregated_metric[passenger] = []
+                aggregated_metric[passenger].append(value)
+
+        # Calculate the mean for each passenger
+        for passenger, values in aggregated_metric.items():
+            aggregated_metric[passenger] = np.mean(values)
+
+        return aggregated_metric
+
     def _calculate_mean_service_metric(self, service_metric_list: list[dict[str, dict[str, dict[str, float]]]]) -> dict[str, dict[str, dict[str, float]]]:
         """
         Calculates the mean service metric for each service.
@@ -418,6 +445,18 @@ class Stats:
         """
         for agent, value in metric.items():
             self.logger.add_scalar(f'agents/{metric_name}/{agent}', value, ep_i)
+
+    def _log_passenger_metric_to_tensorboard(self, metric: dict[str, float], metric_name: str, ep_i: int):
+        """
+        Logs the calculated mean metric for each passenger to Tensorboard.
+        
+        Args:
+            metric (dict[str, float]): Dictionary containing the calculated mean metric for each passenger.
+            metric_name (str): The name of the metric to log.
+            ep_i (int): The episode index.
+        """
+        for passenger, value in metric.items():
+            self.logger.add_scalar(f'passengers/{metric_name}/{passenger}', value, ep_i)
 
     def _log_service_metric_to_tensorboard(self, metric: dict[str, dict[str, dict[str, float]]], metric_name: str, ep_i: int):
         """
@@ -462,17 +501,8 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
         self.num_agents = self.get_env_attr('num_agents')[0]
         self.is_multiagent = self.num_agents > 1
         self.episode_length = len(self.get_env_attr('kernel')[0].simulation_days)
-        self.init_returns()
+        self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
         self.stats = Stats(self.agents, self.num_agents, self.episode_length, log_dir)
-    
-    def init_returns(self) -> None:
-        """
-        Initialize the returns of the environments.
-        """
-        if self.is_multiagent:
-            self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
-        else:
-            self.returns = np.zeros(self.n_envs, dtype=np.float32)
     
     def step(self, action: list, *args, **kwargs) -> Tuple[list, float, bool, bool, dict]:
         """
@@ -485,10 +515,11 @@ class StatsSubprocVectorEnv(SubprocVectorEnv):
             Tuple[list, float, bool, bool, dict]: Observation, reward, termination, truncation and info of the environment.
         """
         obs, reward, terminated, truncated, info = super().step(action, *args, **kwargs)
-        self.returns += reward
+        if self.is_multiagent:
+            self.returns += reward
         if terminated.all():
             self.stats.to_tensorboard(info, self.returns, self.episode_index)
-            self.init_returns()
+            self.returns = np.zeros((self.n_envs, self.num_agents), dtype=np.float32)
             self.episode_index += self.n_envs
         return obs, reward, terminated, truncated, info
 
@@ -623,7 +654,10 @@ class BaseRobinEnv(ABC):
                 'travelling': traveling_passengers,
                 'not_travelling': total_passengers - traveling_passengers,
                 'percentage_travelling': traveling_passengers / total_passengers * 100,
-                'utility': np.mean([passenger.utility for passenger in self.kernel.passengers])
+                'utility': np.mean([passenger.utility for passenger in self.kernel.passengers]),
+                'user_patterns': {
+                    'travelling': dict(Counter(passenger.user_pattern.name for passenger in self.kernel.passengers if passenger.journey))
+                }
             }
         }
         return info
