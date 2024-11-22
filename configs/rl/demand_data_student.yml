@@ -117,8 +117,8 @@ demandPattern:
       - market: 1
         potential_demand: randint
         potential_demand_kwargs:
-          low: 60
-          high: 101
+          low: 120
+          high: 201
         user_pattern_distribution:
           - id: 1
             percentage: 0.6
@@ -127,8 +127,8 @@ demandPattern:
       - market: 2
         potential_demand: randint
         potential_demand_kwargs:
-          low: 20
-          high: 41
+          low: 40
+          high: 81
         user_pattern_distribution:
           - id: 1
             percentage: 0.6
