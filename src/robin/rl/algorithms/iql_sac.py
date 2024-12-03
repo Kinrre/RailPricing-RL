@@ -47,6 +47,13 @@ class IQLSAC:
         self.q_optimizer = [optim.Adam(list(self.qf1[i].parameters()) + list(self.qf2[i].parameters()), lr=q_lr) for i in range(self.num_agents)]
         self.actor_optimizer = [optim.Adam(list(self.actor[i].parameters()), lr=policy_lr) for i in range(self.num_agents)]
 
+    def eval(self) -> None:
+        """
+        Set the model to evaluation mode.
+        """
+        for agent in self.actor:
+            agent.eval()
+
     def get_action(self, obs: torch.Tensor) -> tuple[list[torch.Tensor], torch.Tensor, list[torch.Tensor]]:
         """
         Get the actions for each agent in the environment.

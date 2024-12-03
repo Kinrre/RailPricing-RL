@@ -66,6 +66,7 @@ class Evaluator:
             run_name=self.evaluation_path
         )
         self.agent = self.load_model(self.args.algorithm, self.model_path)
+        self.agent.eval()
         self.episode_length = len(self.env.get_env_attr('kernel')[0].simulation_days)
         # Initialize the policy distribution, shape: (num_agents, n_actions, n_episodes, episode_length)
         self.n_episodes = self.args.total_timesteps // self.episode_length
